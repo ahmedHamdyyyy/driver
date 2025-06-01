@@ -1,0 +1,2 @@
+C:/Users/Administrator/TaxiDriverApp-master/android/app/.cxx/Debug/3f6x95m2/x86_64/CMakeFiles/edit_cache.dir
+C:/Users/Administrator/TaxiDriverApp-master/android/app/.cxx/Debug/3f6x95m2/x86_64/CMakeFiles/rebuild_cache.dir

@@ -1,0 +1,105 @@
+{
+  "project_info": {
+    "project_number": "74998519528",
+    "project_id": "friends-cc2a9",
+    "storage_bucket": "friends-cc2a9.appspot.com"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:74998519528:android:ecc751cc575f9fa47a9b5d",
+        "android_client_info": {
+          "package_name": "com.better.friends"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "74998519528-puhu217u23uploqf9vedel9nl2sci91f.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyCg-5Kmm6a9D64koQ1tBqeYxLH5Lvjp91Q"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "74998519528-puhu217u23uploqf9vedel9nl2sci91f.apps.googleusercontent.com",
+              "client_type": 3
+            }
+          ]
+        }
+      }
+    },
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:74998519528:android:d60413346ad2587a7a9b5d",
+        "android_client_info": {
+          "package_name": "com.flutter.friends"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "74998519528-orcfck0ogr370jb15p42d02k6bq9hq1q.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.flutter.friends",
+            "certificate_hash": "cb104fcae02d893ad95b91ae9304f4aec5ceb8af"
+          }
+        },
+        {
+          "client_id": "74998519528-puhu217u23uploqf9vedel9nl2sci91f.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyCg-5Kmm6a9D64koQ1tBqeYxLH5Lvjp91Q"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "74998519528-puhu217u23uploqf9vedel9nl2sci91f.apps.googleusercontent.com",
+              "client_type": 3
+            }
+          ]
+        }
+      }
+    },
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:74998519528:android:6baf0e6fd4cde19d7a9b5d",
+        "android_client_info": {
+          "package_name": "com.mighty.taxidriver"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "74998519528-puhu217u23uploqf9vedel9nl2sci91f.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyCg-5Kmm6a9D64koQ1tBqeYxLH5Lvjp91Q"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "74998519528-puhu217u23uploqf9vedel9nl2sci91f.apps.googleusercontent.com",
+              "client_type": 3
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
