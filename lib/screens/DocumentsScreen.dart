@@ -1,8 +1,12 @@
 import 'dart:io';
+import 'dart:typed_data';
+import 'dart:ui' as ui;
+import 'dart:convert';
 
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter/rendering.dart';
 import 'package:flutter_image_compress/flutter_image_compress.dart';
 import 'package:flutter_mobx/flutter_mobx.dart';
 import 'package:http/http.dart';
@@ -17,6 +21,8 @@ import 'package:url_launcher/url_launcher.dart';
 import 'package:animate_do/animate_do.dart';
 import 'package:flutter_staggered_animations/flutter_staggered_animations.dart';
 import 'package:lottie/lottie.dart';
+import 'package:pdf/pdf.dart';
+import 'package:pdf/widgets.dart' as pw;
 
 import '../components/ImageSourceDialog.dart';
 import '../core/widget/appbar/back_app_bar.dart';
@@ -54,6 +60,16 @@ class DocumentsScreenState extends State<DocumentsScreen>
   var compressedImg;
 
   int? isExpire;
+
+  // New variables for 4 specific images - completely separate variables
+  File? frontIdImage;
+  File? backIdImage;
+  File? frontLicenseImage;
+  File? backLicenseImage;
+  String? combinedFilePath;
+
+  // Track which image is currently being selected
+  String? currentlySelectingImageType;
 
   // Animation controllers
   late AnimationController _fadeController;
@@ -189,6 +205,12 @@ class DocumentsScreenState extends State<DocumentsScreen>
       selectedDocument = null;
       docId = 0;
       isExpire = 0;
+      frontIdImage = null;
+      backIdImage = null;
+      frontLicenseImage = null;
+      backLicenseImage = null;
+      combinedFilePath = null;
+      currentlySelectingImageType = null;
     });
 
     await getDocument();
@@ -291,7 +313,7 @@ class DocumentsScreenState extends State<DocumentsScreen>
     });
   }
 
-  Future<File> compressFile(File file) async {
+  Future<File> compressFile(File file, {String? documentType}) async {
     Directory d = await getTemporaryDirectory();
     FlutterImageCompress.validator.ignoreCheckExtName = true;
     try {
@@ -304,13 +326,703 @@ class DocumentsScreenState extends State<DocumentsScreen>
       if (result == null) {
         return file;
       }
-      File file2 = await File('${d.path}/image.png').create();
+
+      // Generate unique filename based on document type and timestamp
+      String uniqueFileName = documentType != null
+          ? '${documentType}_${DateTime.now().millisecondsSinceEpoch}.png'
+          : 'image_${DateTime.now().millisecondsSinceEpoch}.png';
+
+      File file2 = await File('${d.path}/$uniqueFileName').create();
       file2.writeAsBytesSync(result);
+
+      print('💾 Compressed image saved to: ${file2.path}');
       return file2;
     } catch (e) {
       log('فشل ضغط الملف: ${e.toString()}');
       return file;
     }
+  }
+
+  // Function to combine 4 images into a single PDF
+  Future<String?> combineImagesToPDF() async {
+    if (frontIdImage == null ||
+        backIdImage == null ||
+        frontLicenseImage == null ||
+        backLicenseImage == null) {
+      toast("يجب تحديد جميع الصور الأربع");
+      return null;
+    }
+
+    try {
+      final pdf = pw.Document();
+      Directory tempDir = await getTemporaryDirectory();
+
+      // Compress all images first
+      File compressedFrontId = await compressFile(frontIdImage!);
+      File compressedBackId = await compressFile(backIdImage!);
+      File compressedFrontLicense = await compressFile(frontLicenseImage!);
+      File compressedBackLicense = await compressFile(backLicenseImage!);
+
+      // Read image bytes
+      Uint8List frontIdBytes = await compressedFrontId.readAsBytes();
+      Uint8List backIdBytes = await compressedBackId.readAsBytes();
+      Uint8List frontLicenseBytes = await compressedFrontLicense.readAsBytes();
+      Uint8List backLicenseBytes = await compressedBackLicense.readAsBytes();
+
+      // Create professional PDF with cover page and proper layout
+
+      // Cover Page
+      pdf.addPage(
+        pw.Page(
+          pageFormat: PdfPageFormat.a4,
+          margin: pw.EdgeInsets.all(40),
+          build: (pw.Context context) {
+            return pw.Column(
+              crossAxisAlignment: pw.CrossAxisAlignment.center,
+              children: [
+                pw.Spacer(flex: 2),
+
+                // Main Title
+                pw.Container(
+                  padding: pw.EdgeInsets.all(20),
+                  decoration: pw.BoxDecoration(
+                    color: PdfColors.blue50,
+                    borderRadius: pw.BorderRadius.circular(15),
+                    border: pw.Border.all(color: PdfColors.blue200, width: 2),
+                  ),
+                  child: pw.Column(
+                    children: [
+                      pw.Text(
+                        'DRIVER DOCUMENTS',
+                        style: pw.TextStyle(
+                          fontSize: 28,
+                          fontWeight: pw.FontWeight.bold,
+                          color: PdfColors.blue800,
+                        ),
+                        textAlign: pw.TextAlign.center,
+                      ),
+                      pw.SizedBox(height: 10),
+                      pw.Text(
+                        'Official Registration Documents',
+                        style: pw.TextStyle(
+                          fontSize: 16,
+                          fontWeight: pw.FontWeight.normal,
+                          color: PdfColors.blue600,
+                        ),
+                        textAlign: pw.TextAlign.center,
+                      ),
+                    ],
+                  ),
+                ),
+
+                pw.Spacer(flex: 1),
+
+                // Document Info
+                pw.Container(
+                  padding: pw.EdgeInsets.all(15),
+                  decoration: pw.BoxDecoration(
+                    border: pw.Border.all(color: PdfColors.grey400),
+                    borderRadius: pw.BorderRadius.circular(10),
+                  ),
+                  child: pw.Column(
+                    children: [
+                      pw.Text(
+                        'Submission Date: ${DateTime.now().toString().split(' ')[0]}',
+                        style: pw.TextStyle(
+                            fontSize: 14, fontWeight: pw.FontWeight.bold),
+                      ),
+                      pw.SizedBox(height: 10),
+                      pw.Text(
+                        'Reference: DOC-${DateTime.now().millisecondsSinceEpoch}',
+                        style: pw.TextStyle(
+                            fontSize: 12, fontWeight: pw.FontWeight.bold),
+                      ),
+                    ],
+                  ),
+                ),
+
+                pw.Spacer(flex: 3),
+
+                // Footer
+                pw.Text(
+                  'This document contains required registration documents',
+                  style: pw.TextStyle(fontSize: 12, color: PdfColors.grey600),
+                  textAlign: pw.TextAlign.center,
+                ),
+              ],
+            );
+          },
+        ),
+      );
+
+      // Documents Pages
+      pdf.addPage(
+        pw.MultiPage(
+          pageFormat: PdfPageFormat.a4,
+          margin: pw.EdgeInsets.all(30),
+          header: (pw.Context context) {
+            return pw.Container(
+              padding: pw.EdgeInsets.only(bottom: 20),
+              decoration: pw.BoxDecoration(
+                border: pw.Border(
+                    bottom: pw.BorderSide(color: PdfColors.blue200, width: 2)),
+              ),
+              child: pw.Row(
+                mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+                children: [
+                  pw.Text(
+                    'DRIVER DOCUMENTS',
+                    style: pw.TextStyle(
+                        fontSize: 18,
+                        fontWeight: pw.FontWeight.bold,
+                        color: PdfColors.blue800),
+                  ),
+                  pw.Text(
+                    'Page ${context.pageNumber}',
+                    style: pw.TextStyle(fontSize: 12, color: PdfColors.grey600),
+                  ),
+                ],
+              ),
+            );
+          },
+          footer: (pw.Context context) {
+            return pw.Container(
+              padding: pw.EdgeInsets.only(top: 10),
+              decoration: pw.BoxDecoration(
+                border: pw.Border(top: pw.BorderSide(color: PdfColors.grey300)),
+              ),
+              child: pw.Center(
+                child: pw.Text(
+                  'Generated automatically on ${DateTime.now().toString().split(' ')[0]}',
+                  style: pw.TextStyle(fontSize: 10, color: PdfColors.grey500),
+                ),
+              ),
+            );
+          },
+          build: (pw.Context context) {
+            return [
+              // Document 1: Front ID
+              _buildDocumentSection(
+                title: 'National ID Card - Front Side',
+                subtitle: 'Document 1 of 4',
+                imageBytes: frontIdBytes,
+                documentNumber: '1',
+              ),
+
+              pw.NewPage(),
+
+              // Document 2: Back ID
+              _buildDocumentSection(
+                title: 'National ID Card - Back Side',
+                subtitle: 'Document 2 of 4',
+                imageBytes: backIdBytes,
+                documentNumber: '2',
+              ),
+
+              pw.NewPage(),
+
+              // Document 3: Front License
+              _buildDocumentSection(
+                title: 'Driving License - Front Side',
+                subtitle: 'Document 3 of 4',
+                imageBytes: frontLicenseBytes,
+                documentNumber: '3',
+              ),
+
+              pw.NewPage(),
+
+              // Document 4: Back License
+              _buildDocumentSection(
+                title: 'Driving License - Back Side',
+                subtitle: 'Document 4 of 4',
+                imageBytes: backLicenseBytes,
+                documentNumber: '4',
+              ),
+            ];
+          },
+        ),
+      );
+
+      // Save PDF to temporary file
+      String pdfPath =
+          '${tempDir.path}/driver_documents_${DateTime.now().millisecondsSinceEpoch}.pdf';
+      File pdfFile = File(pdfPath);
+      await pdfFile.writeAsBytes(await pdf.save());
+
+      return pdfPath;
+    } catch (e) {
+      log('فشل في دمج الصور: ${e.toString()}');
+      toast('فشل في دمج الصور');
+      return null;
+    }
+  }
+
+  // Helper method to build professional document section
+  pw.Widget _buildDocumentSection({
+    required String title,
+    required String subtitle,
+    required Uint8List imageBytes,
+    required String documentNumber,
+  }) {
+    return pw.Column(
+      crossAxisAlignment: pw.CrossAxisAlignment.start,
+      children: [
+        // Document header
+        pw.Container(
+          width: double.infinity,
+          padding: pw.EdgeInsets.all(15),
+          decoration: pw.BoxDecoration(
+            color: PdfColors.blue50,
+            border: pw.Border.all(color: PdfColors.blue200),
+            borderRadius: pw.BorderRadius.circular(10),
+          ),
+          child: pw.Row(
+            children: [
+              pw.Container(
+                width: 40,
+                height: 40,
+                decoration: pw.BoxDecoration(
+                  color: PdfColors.blue500,
+                  shape: pw.BoxShape.circle,
+                ),
+                child: pw.Center(
+                  child: pw.Text(
+                    documentNumber,
+                    style: pw.TextStyle(
+                      fontSize: 20,
+                      fontWeight: pw.FontWeight.bold,
+                      color: PdfColors.white,
+                    ),
+                  ),
+                ),
+              ),
+              pw.SizedBox(width: 15),
+              pw.Expanded(
+                child: pw.Column(
+                  crossAxisAlignment: pw.CrossAxisAlignment.start,
+                  children: [
+                    pw.Text(
+                      title,
+                      style: pw.TextStyle(
+                        fontSize: 18,
+                        fontWeight: pw.FontWeight.bold,
+                        color: PdfColors.blue800,
+                      ),
+                    ),
+                    pw.SizedBox(height: 3),
+                    pw.Text(
+                      subtitle,
+                      style: pw.TextStyle(
+                        fontSize: 14,
+                        color: PdfColors.blue600,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+
+        pw.SizedBox(height: 20),
+
+        // Document image with professional frame
+        pw.Center(
+          child: pw.Container(
+            padding: pw.EdgeInsets.all(10),
+            decoration: pw.BoxDecoration(
+              color: PdfColors.white,
+              border: pw.Border.all(color: PdfColors.grey400, width: 2),
+              borderRadius: pw.BorderRadius.circular(15),
+              boxShadow: [
+                pw.BoxShadow(
+                  color: PdfColors.grey300,
+                  offset: PdfPoint(0, 4),
+                  blurRadius: 10,
+                ),
+              ],
+            ),
+            child: pw.Container(
+              decoration: pw.BoxDecoration(
+                border: pw.Border.all(color: PdfColors.grey300),
+                borderRadius: pw.BorderRadius.circular(10),
+              ),
+              child: pw.Image(
+                pw.MemoryImage(imageBytes),
+                fit: pw.BoxFit.contain,
+                width: 400,
+                height: 250,
+              ),
+            ),
+          ),
+        ),
+
+        pw.SizedBox(height: 20),
+
+        // Document verification note
+        pw.Container(
+          width: double.infinity,
+          padding: pw.EdgeInsets.all(12),
+          decoration: pw.BoxDecoration(
+            color: PdfColors.green50,
+            border: pw.Border.all(color: PdfColors.green200),
+            borderRadius: pw.BorderRadius.circular(8),
+          ),
+          child: pw.Row(
+            children: [
+              pw.Container(
+                width: 20,
+                height: 20,
+                decoration: pw.BoxDecoration(
+                  color: PdfColors.green500,
+                  shape: pw.BoxShape.circle,
+                ),
+                child: pw.Center(
+                  child: pw.Text(
+                    'OK',
+                    style: pw.TextStyle(
+                      fontSize: 10,
+                      fontWeight: pw.FontWeight.bold,
+                      color: PdfColors.white,
+                    ),
+                  ),
+                ),
+              ),
+              pw.SizedBox(width: 10),
+              pw.Expanded(
+                child: pw.Column(
+                  crossAxisAlignment: pw.CrossAxisAlignment.start,
+                  children: [
+                    pw.Text(
+                      'Document uploaded successfully',
+                      style: pw.TextStyle(
+                        fontSize: 12,
+                        fontWeight: pw.FontWeight.bold,
+                        color: PdfColors.green800,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+
+  // Function to pick image for specific document type
+  Future<void> pickImageForDocument(String documentType) async {
+    print('🎯 STARTING IMAGE SELECTION FOR: $documentType');
+
+    // Set the currently selecting type to track it
+    currentlySelectingImageType = documentType;
+
+    showModalBottomSheet(
+      context: context,
+      shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.only(
+              topLeft: Radius.circular(defaultRadius),
+              topRight: Radius.circular(defaultRadius))),
+      builder: (_) {
+        return StatefulBuilder(
+          builder: (BuildContext context, StateSetter setModalState) {
+            return Padding(
+              padding: MediaQuery.of(context).viewInsets,
+              child: ImageSourceDialog(
+                onCamera: () async {
+                  Navigator.pop(context);
+                  try {
+                    var result = await ImagePicker().pickImage(
+                        source: ImageSource.camera, imageQuality: 100);
+                    if (result != null) {
+                      File imageFile = File(result.path);
+                      File compressedFile = await compressFile(imageFile,
+                          documentType: documentType);
+                      int b = await compressedFile.length();
+                      double fileSizeInMB = b / (1024 * 1024);
+                      if (fileSizeInMB > 2) {
+                        return toast("حجم الملف يجب أن يكون أقل من 2 ميجابايت");
+                      }
+                      _setImageForDocumentType(documentType, compressedFile);
+                    }
+                  } catch (e) {
+                    toast(e.toString());
+                    return;
+                  }
+                },
+                onGallery: () async {
+                  Navigator.pop(context);
+                  var result = await ImagePicker().pickImage(
+                      source: ImageSource.gallery, imageQuality: 100);
+                  if (result != null) {
+                    File imageFile = File(result.path);
+                    File compressedFile = await compressFile(imageFile,
+                        documentType: documentType);
+                    int b = await compressedFile.length();
+                    double fileSizeInMB = b / (1024 * 1024);
+                    if (fileSizeInMB > 2) {
+                      return toast("حجم الملف يجب أن يكون أقل من 2 ميجابايت");
+                    }
+                    _setImageForDocumentType(documentType, compressedFile);
+                  }
+                },
+                onFile: () async {
+                  Navigator.pop(context);
+                  // For document images, we'll still use image picker
+                  var result = await ImagePicker().pickImage(
+                      source: ImageSource.gallery, imageQuality: 100);
+                  if (result != null) {
+                    File imageFile = File(result.path);
+                    File compressedFile = await compressFile(imageFile,
+                        documentType: documentType);
+                    int b = await compressedFile.length();
+                    double fileSizeInMB = b / (1024 * 1024);
+                    if (fileSizeInMB > 2) {
+                      return toast("حجم الملف يجب أن يكون أقل من 2 ميجابايت");
+                    }
+                    _setImageForDocumentType(documentType, compressedFile);
+                  }
+                },
+                isFile: true,
+              ),
+            );
+          },
+        );
+      },
+    );
+  }
+
+  void _setImageForDocumentType(String documentType, File imageFile) {
+    print('=== SETTING IMAGE FOR: $documentType ===');
+    print('Original image path: ${imageFile.path}');
+    print('Image file exists: ${imageFile.existsSync()}');
+    print('Image file size: ${imageFile.lengthSync()} bytes');
+
+    // Create a completely new file with unique name to avoid any reference issues
+    Directory tempDir = Directory.systemTemp;
+    String uniqueFileName =
+        '${documentType}_final_${DateTime.now().millisecondsSinceEpoch}_${DateTime.now().microsecond}.png';
+    File uniqueFile = File('${tempDir.path}/$uniqueFileName');
+
+    // Read and copy the image bytes to the new unique file
+    Uint8List imageBytes = imageFile.readAsBytesSync();
+    uniqueFile.writeAsBytesSync(imageBytes);
+
+    // Generate hash to verify uniqueness
+    String imageHash = base64Encode(
+        imageBytes.take(100).toList()); // Hash first 100 bytes for speed
+
+    print('📄 Created unique file: ${uniqueFile.path}');
+    print('📄 Unique file size: ${uniqueFile.lengthSync()} bytes');
+    print('🔍 Image hash (first 100 bytes): $imageHash');
+
+    setState(() {
+      // Clear the currently selecting type first
+      currentlySelectingImageType = null;
+
+      // Set the specific image based on document type with the unique file
+      switch (documentType) {
+        case 'front_id':
+          frontIdImage = uniqueFile;
+          print('✅ SET FRONT ID: ${frontIdImage?.path}');
+          print('✅ FRONT ID SIZE: ${frontIdImage?.lengthSync()} bytes');
+          break;
+        case 'back_id':
+          backIdImage = uniqueFile;
+          print('✅ SET BACK ID: ${backIdImage?.path}');
+          print('✅ BACK ID SIZE: ${backIdImage?.lengthSync()} bytes');
+          break;
+        case 'front_license':
+          frontLicenseImage = uniqueFile;
+          print('✅ SET FRONT LICENSE: ${frontLicenseImage?.path}');
+          print(
+              '✅ FRONT LICENSE SIZE: ${frontLicenseImage?.lengthSync()} bytes');
+          break;
+        case 'back_license':
+          backLicenseImage = uniqueFile;
+          print('✅ SET BACK LICENSE: ${backLicenseImage?.path}');
+          print('✅ BACK LICENSE SIZE: ${backLicenseImage?.lengthSync()} bytes');
+          break;
+        default:
+          print('❌ Unknown document type: $documentType');
+          return;
+      }
+
+      // Print current state of all images with detailed info
+      print('--- DETAILED STATE AFTER SETTING $documentType ---');
+      if (frontIdImage != null) {
+        print(
+            'Front ID: ${frontIdImage!.path} (${frontIdImage!.lengthSync()} bytes)');
+      } else {
+        print('Front ID: NULL');
+      }
+      if (backIdImage != null) {
+        print(
+            'Back ID: ${backIdImage!.path} (${backIdImage!.lengthSync()} bytes)');
+      } else {
+        print('Back ID: NULL');
+      }
+      if (frontLicenseImage != null) {
+        print(
+            'Front License: ${frontLicenseImage!.path} (${frontLicenseImage!.lengthSync()} bytes)');
+      } else {
+        print('Front License: NULL');
+      }
+      if (backLicenseImage != null) {
+        print(
+            'Back License: ${backLicenseImage!.path} (${backLicenseImage!.lengthSync()} bytes)');
+      } else {
+        print('Back License: NULL');
+      }
+      print('========================================');
+    });
+  }
+
+  // Function to upload combined PDF
+  Future<void> uploadCombinedDocument() async {
+    if (frontIdImage == null ||
+        backIdImage == null ||
+        frontLicenseImage == null ||
+        backLicenseImage == null) {
+      toast("يجب تحديد جميع الصور الأربع قبل الرفع");
+      return;
+    }
+
+    appStore.setLoading(true);
+
+    // Combine images into PDF
+    String? pdfPath = await combineImagesToPDF();
+    if (pdfPath == null) {
+      appStore.setLoading(false);
+      return;
+    }
+
+    // Use the existing addDocument function with the combined PDF
+    setState(() {
+      imagePath = pdfPath;
+    });
+
+    // Find or create a generic document ID for combined documents
+    int combinedDocId = docId != 0
+        ? docId
+        : (documentList.isNotEmpty ? documentList.first.id! : 1);
+
+    await addDocument(combinedDocId, isExpire, dateTime: selectedDate);
+  }
+
+  // Helper method to build image upload box
+  Widget _buildImageUploadBox({
+    required String title,
+    required File? image,
+    required VoidCallback onTap,
+    required IconData icon,
+    required String documentType,
+  }) {
+    bool hasImage = image != null;
+    print(
+        'Building box for $documentType, hasImage: $hasImage, imagePath: ${image?.path}');
+
+    return InkWell(
+      key: ValueKey('image_box_$documentType'),
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(12),
+      child: Container(
+        decoration: BoxDecoration(
+          color:
+              hasImage ? Colors.green.withOpacity(0.05) : Colors.grey.shade50,
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(
+            color: hasImage ? Colors.green : Colors.grey.shade300,
+            width: hasImage ? 2 : 1,
+          ),
+        ),
+        child: Stack(
+          children: [
+            if (hasImage)
+              ClipRRect(
+                borderRadius: BorderRadius.circular(12),
+                child: Image.file(
+                  image,
+                  fit: BoxFit.cover,
+                  width: double.infinity,
+                  height: double.infinity,
+                ),
+              ),
+            Container(
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(12),
+                color: hasImage
+                    ? Colors.black.withOpacity(0.3)
+                    : Colors.transparent,
+              ),
+              child: Padding(
+                padding: EdgeInsets.all(12),
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Container(
+                      padding: EdgeInsets.all(8),
+                      decoration: BoxDecoration(
+                        color: hasImage
+                            ? Colors.white.withOpacity(0.9)
+                            : primaryColor.withOpacity(0.1),
+                        shape: BoxShape.circle,
+                      ),
+                      child: Icon(
+                        hasImage ? Icons.check : icon,
+                        color: hasImage ? Colors.green : primaryColor,
+                        size: 20,
+                      ),
+                    ),
+                    SizedBox(height: 8),
+                    Text(
+                      title,
+                      style: boldTextStyle(
+                        size: 11,
+                        color: hasImage ? Colors.white : primaryColor,
+                      ),
+                      textAlign: TextAlign.center,
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                    if (!hasImage) ...[
+                      SizedBox(height: 4),
+                      Text(
+                        "اضغط للتحديد",
+                        style: secondaryTextStyle(
+                          size: 10,
+                          color: Colors.grey.shade600,
+                        ),
+                        textAlign: TextAlign.center,
+                      ),
+                    ],
+                  ],
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  // Helper method to check if all images are selected
+  bool _areAllImagesSelected() {
+    return frontIdImage != null &&
+        backIdImage != null &&
+        frontLicenseImage != null &&
+        backLicenseImage != null;
+  }
+
+  // Helper method to get count of selected images
+  int _getSelectedImagesCount() {
+    int count = 0;
+    if (frontIdImage != null) count++;
+    if (backIdImage != null) count++;
+    if (frontLicenseImage != null) count++;
+    if (backLicenseImage != null) count++;
+    return count;
   }
 
   /// SelectImage
@@ -736,136 +1448,194 @@ class DocumentsScreenState extends State<DocumentsScreen>
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
+                      // Modern 4-Image Upload Section
                       Container(
                         child: Directionality(
                           textDirection: TextDirection.rtl,
                           child: Card(
-                            elevation: 2,
+                            elevation: 4,
                             shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(12),
+                              borderRadius: BorderRadius.circular(16),
                             ),
-                            child: Padding(
-                              padding: EdgeInsets.all(16),
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Text(
-                                    "اختر المستند",
-                                    style: boldTextStyle(size: 18),
-                                  ),
-                                  SizedBox(height: 16),
-                                  Row(
-                                    children: [
-                                      Expanded(
-                                        child: Container(
-                                          padding: EdgeInsets.symmetric(
-                                              horizontal: 12, vertical: 4),
+                            child: Container(
+                              decoration: BoxDecoration(
+                                borderRadius: BorderRadius.circular(16),
+                                gradient: LinearGradient(
+                                  begin: Alignment.topLeft,
+                                  end: Alignment.bottomRight,
+                                  colors: [
+                                    Colors.white,
+                                    Colors.grey.shade50,
+                                  ],
+                                ),
+                              ),
+                              child: Padding(
+                                padding: EdgeInsets.all(20),
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Row(
+                                      children: [
+                                        Container(
+                                          padding: EdgeInsets.all(12),
                                           decoration: BoxDecoration(
-                                            color: Colors.grey.shade50,
+                                            color:
+                                                primaryColor.withOpacity(0.1),
                                             borderRadius:
-                                                BorderRadius.circular(8),
-                                            border:
-                                                Border.all(color: dividerColor),
+                                                BorderRadius.circular(12),
                                           ),
-                                          child: DropdownButtonFormField<
-                                              DocumentModel>(
-                                            hint: Text("اختر المستند",
-                                                style: primaryTextStyle(
-                                                    color:
-                                                        textSecondaryColorGlobal)),
-                                            decoration:
-                                                InputDecoration.collapsed(
-                                              hintText: null,
-                                              focusColor: primaryColor,
-                                            ),
-                                            isExpanded: true,
-                                            isDense: true,
-                                            icon: Icon(Icons.arrow_drop_down,
-                                                color: primaryColor),
-                                            items: documentList.map((e) {
-                                              return DropdownMenuItem(
-                                                value: e,
-                                                key: ValueKey(e.id),
-                                                child: RichText(
-                                                  text: TextSpan(
-                                                    text: e.name.validate(),
-                                                    style: primaryTextStyle(),
-                                                    children: [
-                                                      TextSpan(
-                                                        text:
-                                                            '${e.isRequired == 1 ? ' *' : ''}',
-                                                        style: boldTextStyle(
-                                                            color: Colors.red),
-                                                      ),
-                                                    ],
-                                                  ),
-                                                ),
-                                              );
-                                            }).toList(),
-                                            value: selectedDocument,
-                                            onChanged: (DocumentModel? val) {
-                                              if (val != null) {
-                                                setState(() {
-                                                  selectedDocument = val;
-                                                  docId = val.id!;
-                                                  isExpire = val.hasExpiryDate!;
-                                                });
-                                              }
-                                            },
+                                          child: Icon(
+                                            Icons.camera_alt,
+                                            color: primaryColor,
+                                            size: 24,
                                           ),
                                         ),
-                                      ),
-                                      if (docId != 0) SizedBox(width: 16),
-                                      if (docId != 0)
-                                        Visibility(
-                                          visible:
-                                              !uploadedDocList.contains(docId),
-                                          child: InkWell(
-                                            onTap: () {
-                                              if (isExpire == 1) {
-                                                getMultipleFile(docId,
-                                                    isExpire == 0 ? null : 1,
-                                                    dateTime: selectedDate);
-                                              } else {
-                                                getMultipleFile(docId,
-                                                    isExpire == 0 ? null : 1);
-                                              }
-                                            },
-                                            child: Container(
-                                              padding: EdgeInsets.symmetric(
-                                                  horizontal: 16, vertical: 12),
-                                              decoration: BoxDecoration(
-                                                color: primaryColor,
-                                                borderRadius:
-                                                    BorderRadius.circular(8),
+                                        SizedBox(width: 16),
+                                        Expanded(
+                                          child: Column(
+                                            crossAxisAlignment:
+                                                CrossAxisAlignment.start,
+                                            children: [
+                                              Text(
+                                                "تحميل الوثائق المطلوبة",
+                                                style: boldTextStyle(size: 20),
                                               ),
-                                              child: Row(
-                                                mainAxisSize: MainAxisSize.min,
-                                                children: [
-                                                  Icon(Icons.add,
-                                                      color: Colors.white,
-                                                      size: 20),
-                                                  SizedBox(width: 8),
-                                                  Text(
-                                                    "إضافة مستند",
-                                                    style: boldTextStyle(
-                                                        color: Colors.white,
-                                                        size: 14),
-                                                  ),
-                                                ],
+                                              SizedBox(height: 4),
+                                              Text(
+                                                "يرجى تحميل جميع الصور المطلوبة بوضوح",
+                                                style: secondaryTextStyle(
+                                                    size: 14),
+                                              ),
+                                            ],
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                    SizedBox(height: 24),
+
+                                    // Grid of 4 image upload boxes
+                                    GridView.count(
+                                      shrinkWrap: true,
+                                      physics: NeverScrollableScrollPhysics(),
+                                      crossAxisCount: 2,
+                                      crossAxisSpacing: 16,
+                                      mainAxisSpacing: 16,
+                                      childAspectRatio: 1.2,
+                                      children: [
+                                        _buildImageUploadBox(
+                                          title:
+                                              "بطاقة الهوية\n(الوجه الأمامي)",
+                                          image: frontIdImage,
+                                          onTap: () {
+                                            print('Tapping front_id');
+                                            pickImageForDocument('front_id');
+                                          },
+                                          icon: Icons.credit_card,
+                                          documentType: 'front_id',
+                                        ),
+                                        _buildImageUploadBox(
+                                          title: "بطاقة الهوية\n(الوجه الخلفي)",
+                                          image: backIdImage,
+                                          onTap: () {
+                                            print('Tapping back_id');
+                                            pickImageForDocument('back_id');
+                                          },
+                                          icon: Icons.credit_card,
+                                          documentType: 'back_id',
+                                        ),
+                                        _buildImageUploadBox(
+                                          title:
+                                              "رخصة القيادة\n(الوجه الأمامي)",
+                                          image: frontLicenseImage,
+                                          onTap: () {
+                                            print('Tapping front_license');
+                                            pickImageForDocument(
+                                                'front_license');
+                                          },
+                                          icon: Icons.drive_eta,
+                                          documentType: 'front_license',
+                                        ),
+                                        _buildImageUploadBox(
+                                          title: "رخصة القيادة\n(الوجه الخلفي)",
+                                          image: backLicenseImage,
+                                          onTap: () {
+                                            print('Tapping back_license');
+                                            pickImageForDocument(
+                                                'back_license');
+                                          },
+                                          icon: Icons.drive_eta,
+                                          documentType: 'back_license',
+                                        ),
+                                      ],
+                                    ),
+
+                                    SizedBox(height: 24),
+
+                                    // Upload Button
+                                    AnimatedContainer(
+                                      duration: Duration(milliseconds: 300),
+                                      width: double.infinity,
+                                      child: AppButtonWidget(
+                                        text: "رفع جميع الوثائق",
+                                        textStyle: boldTextStyle(
+                                            color: Colors.white, size: 16),
+                                        onTap: uploadCombinedDocument,
+                                        color: _areAllImagesSelected()
+                                            ? primaryColor
+                                            : Colors.grey.shade400,
+                                        elevation:
+                                            _areAllImagesSelected() ? 4 : 0,
+                                        shapeBorder: RoundedRectangleBorder(
+                                          borderRadius:
+                                              BorderRadius.circular(12),
+                                        ),
+                                      ),
+                                    ),
+
+                                    SizedBox(height: 16),
+
+                                    // Progress indicator
+                                    Row(
+                                      mainAxisAlignment:
+                                          MainAxisAlignment.center,
+                                      children: [
+                                        Text(
+                                          "${_getSelectedImagesCount()}/4 صور محددة",
+                                          style: primaryTextStyle(
+                                            color: _areAllImagesSelected()
+                                                ? Colors.green
+                                                : primaryColor,
+                                            size: 14,
+                                          ),
+                                        ),
+                                        SizedBox(width: 8),
+                                        Container(
+                                          width: 100,
+                                          height: 4,
+                                          decoration: BoxDecoration(
+                                            color: Colors.grey.shade300,
+                                            borderRadius:
+                                                BorderRadius.circular(2),
+                                          ),
+                                          child: FractionallySizedBox(
+                                            alignment: Alignment.centerLeft,
+                                            widthFactor:
+                                                _getSelectedImagesCount() / 4,
+                                            child: Container(
+                                              decoration: BoxDecoration(
+                                                color: _areAllImagesSelected()
+                                                    ? Colors.green
+                                                    : primaryColor,
+                                                borderRadius:
+                                                    BorderRadius.circular(2),
                                               ),
                                             ),
                                           ),
-                                        )
-                                    ],
-                                  ),
-                                  SizedBox(height: 12),
-                                  Text(
-                                    "* هذا مستند إلزامي",
-                                    style: primaryTextStyle(
-                                        color: Colors.red, size: 12),
-                                  ),
-                                ],
+                                        ),
+                                      ],
+                                    ),
+                                  ],
+                                ),
                               ),
                             ),
                           ),
