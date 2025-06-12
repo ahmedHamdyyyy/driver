@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import 'package:taxi_driver/screens/settings/settings_screen/presentation/settings_screen.dart';
@@ -6,6 +7,7 @@ import '../main.dart';
 import '../utils/Colors.dart';
 import '../utils/Constants.dart';
 import '../utils/Extensions/app_common.dart';
+import '../Services/DriverZegoService.dart';
 import 'DashboardScreen.dart';
 import 'HomeScreen.dart';
 import 'RidesListScreen.dart';
@@ -13,6 +15,9 @@ import 'all_of_details.dart';
 import 'profile_Screen.dart';
 import 'EditProfileScreen.dart';
 import 'SignInScreen.dart';
+import 'DocumentsScreen.dart';
+import '../network/RestApis.dart';
+import 'ZegoTestScreen.dart';
 
 class MainScreen extends StatefulWidget {
   final int pageIndex;
@@ -26,34 +31,74 @@ class _MainScreenState extends State<MainScreen> {
   late PageController _pageController;
 
   late List<Widget> _screens;
+  bool isLoading = true;
+  bool hasPendingDocuments = false;
 
   @override
   void initState() {
     super.initState();
     _currentIndex = widget.pageIndex;
 
-    // Different screens for guests vs logged in users
-    /*   if (appStore.isGuest) { */
-    /*    _screens = [
-      DashboardScreen(),
-      RidesListScreen(),
-      _buildGuestProfileScreen(),
-      //_buildGuestProfileScreen(),
-      _buildGuestProfileScreen(),
-    ]; */
-    /*   } else { */
-    _screens = [
-      AllOfDetails(),
-      RidesListScreen(),
-      DashboardScreen(),
-
-      SettingsScreen(),
-
-      //ProfileScreen(),
-    ];
-    /*   } */
+    // Check document status first
+    checkDocumentStatus();
 
     _pageController = PageController(initialPage: 0);
+
+    // Initialize Zego service for driver after successful login
+    _initializeZegoService();
+  }
+
+  Future<void> checkDocumentStatus() async {
+    setState(() => isLoading = true);
+
+    try {
+      final docs = await getDriverDocumentList();
+
+      if (docs.data != null && docs.data!.isNotEmpty) {
+        setState(() {
+          hasPendingDocuments = docs.data!.any((doc) => doc.isVerified == 0);
+        });
+      }
+
+      // Initialize screens regardless of document status
+      setState(() {
+        _screens = [
+          AllOfDetails(),
+          RidesListScreen(),
+          DashboardScreen(),
+          SettingsScreen(),
+        ];
+        isLoading = false;
+      });
+    } catch (e) {
+      print('Error checking document status: $e');
+      setState(() => isLoading = false);
+    }
+  }
+
+  Future<void> _initializeZegoService() async {
+    try {
+      print('🚀 MainScreen: Initializing Zego service for driver...');
+
+      // Initialize Zego SDK
+      bool initResult = await DriverZegoService.initializeZego();
+      print('📱 Zego initialization result: $initResult');
+
+      // Auto-login driver to Zego
+      bool loginResult = await DriverZegoService.autoLoginDriver();
+      print('🔐 Driver Zego login result: $loginResult');
+
+      if (loginResult) {
+        print('✅ Driver is now ready to receive calls from riders!');
+        // Print debug info for troubleshooting
+        DriverZegoService.printDebugInfo();
+      } else {
+        print('❌ Failed to login driver to Zego - calls will not work');
+        DriverZegoService.checkZegoStatus();
+      }
+    } catch (e) {
+      print('❌ Error initializing Zego service: $e');
+    }
   }
 
   @override
@@ -63,85 +108,24 @@ class _MainScreenState extends State<MainScreen> {
   }
 
   void _onItemTapped(int index) {
-    // For guest users, prompt login when trying to access certain tabs
-
     setState(() {
       _currentIndex = index;
     });
     _pageController.jumpToPage(index);
   }
 
-/* 
-  void _showLoginPrompt() {
-    showDialog(
-      context: context,
-      builder: (BuildContext context) {
-        return AlertDialog(
-          title: Text(language.logIn),
-          content:
-              Text(language.toEnjoyYourRideExperiencePleaseAllowPermissions),
-          actions: [
-            TextButton(
-              onPressed: () {
-                Navigator.of(context).pop();
-              },
-              child: Text(language.cancel),
-            ),
-            TextButton(
-              onPressed: () {
-                Navigator.of(context).pop();
-                launchScreen(context, SignInScreen(),
-                    pageRouteAnimation: PageRouteAnimation.SlideBottomTop);
-              },
-              child: Text(language.logIn),
-            ),
-          ],
-        );
-      },
-    );
-  }
-
-  Widget _buildGuestProfileScreen() {
-    return Center(
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          Icon(Icons.account_circle, size: 100, color: primaryColor),
-          SizedBox(height: 20),
-          Text("الحساب", style: boldTextStyle(size: 20)),
-          SizedBox(height: 20),
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 32),
-            child: Text(
-              language.toEnjoyYourRideExperiencePleaseAllowPermissions,
-              style: primaryTextStyle(size: 16),
-              textAlign: TextAlign.center,
-            ),
-          ),
-          SizedBox(height: 30),
-          ElevatedButton(
-            style: ElevatedButton.styleFrom(
-              backgroundColor: primaryColor,
-              padding: EdgeInsets.symmetric(horizontal: 40, vertical: 12),
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(24),
-              ),
-            ),
-            onPressed: () {
-              appStore.setIsGuest(false);
-              launchScreen(context, SignInScreen(),
-                  pageRouteAnimation: PageRouteAnimation.SlideBottomTop);
-            },
-            child:
-                Text(language.logIn, style: boldTextStyle(color: Colors.white)),
-          ),
-        ],
-      ),
-    );
-  }
- */
   @override
   Widget build(BuildContext context) {
+    if (isLoading) {
+      return Scaffold(
+        body: Center(
+          child: CircularProgressIndicator(
+            valueColor: AlwaysStoppedAnimation<Color>(primaryColor),
+          ),
+        ),
+      );
+    }
+
     return WillPopScope(
       onWillPop: () async {
         if (_currentIndex != 0) {
@@ -184,16 +168,6 @@ class _MainScreenState extends State<MainScreen> {
               label: language.rides,
               backgroundColor: Colors.white,
             ),
-            /*     BottomNavigationBarItem(
-              icon: _buildSvgIcon(
-                  'images/app_images/setting-1-svgrepo-com.svg', 2),
-              activeIcon: _buildSvgIcon(
-                  'images/app_images/setting-1-svgrepo-com.svg', 2,
-                  isActive: true),
-              label: language.settings,
-              backgroundColor: Colors.white,
-            ), */
-
             BottomNavigationBarItem(
               icon: _buildSvgIcon('assets/icons/activity_icon.svg', 2),
               activeIcon: _buildSvgIcon('assets/icons/activity_icon.svg', 2,
@@ -212,6 +186,19 @@ class _MainScreenState extends State<MainScreen> {
             ),
           ],
         ),
+        floatingActionButton: kDebugMode
+            ? FloatingActionButton(
+                onPressed: () {
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(builder: (context) => ZegoTestScreen()),
+                  );
+                },
+                child: Icon(Icons.video_call),
+                backgroundColor: primaryColor,
+                tooltip: 'Zego Debug',
+              )
+            : null,
       ),
     );
   }

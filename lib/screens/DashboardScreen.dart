@@ -32,6 +32,7 @@ import 'package:url_launcher/url_launcher.dart';
 
 import '../Services/RideService.dart';
 import '../Services/VersionServices.dart';
+import '../Services/DriverZegoService.dart';
 import '../components/AlertScreen.dart';
 import '../components/CancelOrderDialog.dart';
 import '../components/DrawerComponent.dart';
@@ -202,20 +203,34 @@ class DashboardScreenState extends State<DashboardScreen> {
   @override
   void initState() {
     super.initState();
-    if (sharedPref.getInt(IS_ONLINE) == 1) {
-      setState(() {
-        isOnLine = true;
-      });
-    } else {
-      setState(() {
-        isOnLine = false;
-      });
-    }
-    locationPermission();
-    if (app_update_check != null) {
-      VersionService().getVersionData(context, app_update_check);
-    }
     init();
+
+    // Ensure Zego service is active for receiving calls
+    _ensureZegoServiceActive();
+  }
+
+  Future<void> _ensureZegoServiceActive() async {
+    try {
+      print('📞 DashboardScreen: Ensuring Zego service is active...');
+
+      // Check if driver is already logged in to Zego
+      if (!DriverZegoService.isLoggedIn) {
+        print('🔄 Driver not logged in to Zego, attempting auto-login...');
+        bool loginResult = await DriverZegoService.autoLoginDriver();
+
+        if (loginResult) {
+          print('✅ Driver Zego service activated successfully!');
+        } else {
+          print('❌ Failed to activate Zego service');
+          DriverZegoService.checkZegoStatus();
+        }
+      } else {
+        print('✅ Driver already logged in to Zego - ready for calls');
+        DriverZegoService.checkZegoStatus();
+      }
+    } catch (e) {
+      print('❌ Error ensuring Zego service: $e');
+    }
   }
 
   void init() async {

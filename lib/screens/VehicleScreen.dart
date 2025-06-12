@@ -15,6 +15,10 @@ import '../utils/Constants.dart';
 import '../utils/Extensions/app_textfield.dart';
 
 class VehicleScreen extends StatefulWidget {
+  final Map<String, String>? vehicleData;
+
+  VehicleScreen({this.vehicleData});
+
   @override
   VehicleScreenState createState() => VehicleScreenState();
 }
@@ -41,26 +45,42 @@ class VehicleScreenState extends State<VehicleScreen> {
 
   void init() async {
     appStore.setLoading(true);
-    await getUserDetail(userId: sharedPref.getInt(USER_ID)).then((value) {
-      userDetail = value.data!.userDetail!;
-      carModelController.text = userDetail.carModel.validate();
-      carColorController.text = userDetail.carColor.validate();
-      carPlateNumberController.text = userDetail.carPlateNumber.validate();
-      carProductionYearController.text =
-          userDetail.carProductionYear.validate();
 
-      serviceName = value.data!.driverService?.name.validate();
-      serviceDescription = null;
-      vehicleService.text = serviceName ?? '';
+    // If we have vehicle data from DocumentsScreen, use it
+    if (widget.vehicleData != null) {
+      carModelController.text = widget.vehicleData!['carModel'] ?? '';
+      carColorController.text = widget.vehicleData!['carColor'] ?? '';
+      carPlateNumberController.text =
+          widget.vehicleData!['carPlateNumber'] ?? '';
+      carProductionYearController.text =
+          widget.vehicleData!['carProductionYear'] ?? '';
 
       isInitializing = false;
       appStore.setLoading(false);
       setState(() {});
-    }).catchError((error) {
-      appStore.setLoading(false);
-      isInitializing = false;
-      log(error.toString());
-    });
+    } else {
+      // Otherwise fetch from API
+      await getUserDetail(userId: sharedPref.getInt(USER_ID)).then((value) {
+        userDetail = value.data!.userDetail!;
+        carModelController.text = userDetail.carModel.validate();
+        carColorController.text = userDetail.carColor.validate();
+        carPlateNumberController.text = userDetail.carPlateNumber.validate();
+        carProductionYearController.text =
+            userDetail.carProductionYear.validate();
+
+        serviceName = value.data!.driverService?.name.validate();
+        serviceDescription = null;
+        vehicleService.text = serviceName ?? '';
+
+        isInitializing = false;
+        appStore.setLoading(false);
+        setState(() {});
+      }).catchError((error) {
+        appStore.setLoading(false);
+        isInitializing = false;
+        log(error.toString());
+      });
+    }
   }
 
   Future<void> updateVehicle() async {

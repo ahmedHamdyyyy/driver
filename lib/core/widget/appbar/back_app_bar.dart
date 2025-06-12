@@ -40,10 +40,11 @@ class BackAppBar extends StatelessWidget implements PreferredSizeWidget {
                   ),
                 ),
                 const Spacer(),
-                GestureDetector(
+                /*    GestureDetector(
                     onTap: () => Navigator.pop(context),
                     child:
                         const Icon(Icons.arrow_forward, color: Colors.white)),
+              */
               ],
             ),
           ),

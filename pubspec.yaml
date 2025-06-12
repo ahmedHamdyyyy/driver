@@ -98,6 +98,12 @@ dependencies:
   open_file: ^3.5.3
   flutter_ringtone_player: ^4.0.0+3
   permission_handler:
+  # Temporarily disable vibration plugin due to Flutter v1 embedding compatibility issues
+  # vibration: ^1.9.0
+  # ZEGO VIDEO CALLING SDK
+  zego_uikit_prebuilt_call: ^4.0.0
+  zego_uikit_signaling_plugin: ^2.0.0
+  zego_uikit: ^2.0.0
 
   flutter_localizations:
     sdk: flutter
@@ -125,6 +131,10 @@ dependency_overrides:
   cloud_firestore: ^5.0.0
   firebase_core:
   package_info_plus: ^4.1.0
+  # Override floating plugin to use a newer version compatible with current Flutter
+  floating: ^6.0.0
+  # Override vibration plugin to use a newer version compatible with Flutter v2 embedding
+  vibration: ^3.0.0
 
 
 

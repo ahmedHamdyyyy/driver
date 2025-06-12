@@ -260,3 +260,11 @@ var customDialogHeight = 140.0;
 var customDialogWidth = 220.0;
 const PER_PAGE = 50;
 //endregion
+
+//region Zego Cloud SDK Configuration
+const ZEGO_APP_ID = 113057318;
+const ZEGO_APP_SIGN =
+    '0a02b0de3f2a9213f4cd0731e1ce7c0d2ee6acdc1f52cd6958ac7839b9caddc6';
+const ZEGO_CALLBACK_SECRET = '0a02b0de3f2a9213f4cd0731e1ce7c0d';
+const ZEGO_SCENARIO = 'Default';
+//endregion

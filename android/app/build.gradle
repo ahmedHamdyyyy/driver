@@ -6,8 +6,6 @@ plugins {
     id 'com.google.firebase.crashlytics'
 }
 
-import org.gradle.api.GradleException
-
 def localProperties = new Properties()
 def localPropertiesFile = rootProject.file('local.properties')
 if (localPropertiesFile.exists()) {
@@ -18,7 +16,7 @@ if (localPropertiesFile.exists()) {
 
 def flutterRoot = localProperties.getProperty('flutter.sdk')
 if (flutterRoot == null) {
-    throw new GradleException("Flutter SDK not found. Define location with flutter.sdk in the local.properties file.")
+    throw new Exception("Flutter SDK not found. Define location with flutter.sdk in the local.properties file.")
 }
 
 android {
@@ -26,12 +24,12 @@ android {
     compileSdkVersion 35
 
     compileOptions {
-        sourceCompatibility JavaVersion.VERSION_11
-        targetCompatibility JavaVersion.VERSION_11
+        sourceCompatibility JavaVersion.VERSION_17
+        targetCompatibility JavaVersion.VERSION_17
     }
 
     kotlinOptions {
-        jvmTarget = '11'
+        jvmTarget = '17'
     }
 
     sourceSets {
@@ -53,7 +51,7 @@ android {
             shrinkResources false
         }
     }
-    buildToolsVersion '30.0.3'
+    buildToolsVersion '34.0.0'
 }
 
 flutter {
@@ -62,12 +60,12 @@ flutter {
 
 
 dependencies {
-    implementation "org.jetbrains.kotlin:kotlin-stdlib-jdk7:1.9.24"
+    implementation "org.jetbrains.kotlin:kotlin-stdlib-jdk8:2.0.0"
     implementation platform('com.google.firebase:firebase-bom:33.1.2')
     implementation("com.google.firebase:firebase-crashlytics")
     implementation 'androidx.multidex:multidex:2.0.1'
     // Material Components dependency
-    implementation 'com.google.android.material:material:1.9.0'
+    implementation 'com.google.android.material:material:1.12.0'
     // Removed payment dependencies
     // implementation('com.braintreepayments.api:drop-in:5.2.1') {
     //     exclude group: "org.jfrog.cardinalcommerce.gradle", module: "cardinalmobilesdk"
@@ -77,6 +75,8 @@ dependencies {
 
 configurations.all {
     resolutionStrategy {
-        force 'androidx.core:core-ktx:1.6.0'
+        force 'androidx.core:core-ktx:1.12.0'
+        force 'org.jetbrains.kotlin:kotlin-stdlib-jdk8:2.0.0'
+        force 'org.jetbrains.kotlin:kotlin-stdlib:2.0.0'
     }
 }

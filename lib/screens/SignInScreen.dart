@@ -580,12 +580,13 @@ class SignInScreenState extends State<SignInScreen>
               //labelText: language.phoneNumber,
               hintText: "رقم الهاتف",
               hintStyle: TextStyle(color: primaryColor, fontSize: 14),
-              prefixIcon: IntrinsicHeight(
+              prefixIcon: Icon(Icons.phone_outlined, color: primaryColor),
+              /*   prefixIcon: IntrinsicHeight(
                 child: Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [
                     CountryCodePicker(
-                      backgroundColor: Colors.white,
+                        /*  backgroundColor: Colors.white,
                       padding: EdgeInsets.zero,
                       initialSelection: countryCode,
                       showCountryOnly: false,
@@ -593,12 +594,12 @@ class SignInScreenState extends State<SignInScreen>
                           MediaQuery.of(context).size.height * 0.6),
                       showFlag: true,
                       showFlagDialog: true,
-                      showOnlyCountryWhenClosed: false,
-                      alignLeft: false,
+                      showOnlyCountryWhenClosed: false, */
+                        /*    alignLeft: false,
                       textStyle: primaryTextStyle(),
-                      dialogBackgroundColor: Theme.of(context).cardColor,
-                      barrierColor: Colors.black12,
-                      dialogTextStyle: primaryTextStyle(),
+                      //dialogBackgroundColor: Theme.of(context).cardColor,
+                     // barrierColor: Colors.black12,
+                      //dialogTextStyle: primaryTextStyle(),
                       searchDecoration: InputDecoration(
                         iconColor: Theme.of(context).dividerColor,
                         enabledBorder: UnderlineInputBorder(
@@ -607,18 +608,18 @@ class SignInScreenState extends State<SignInScreen>
                         focusedBorder: UnderlineInputBorder(
                             borderSide: BorderSide(color: primaryColor)),
                       ),
-                      searchStyle: primaryTextStyle(),
+                      //searchStyle: primaryTextStyle(),
                       onInit: (c) {
                         countryCode = c!.dialCode!;
                       },
                       onChanged: (c) {
                         countryCode = c.dialCode!;
-                      },
-                    ),
-                    VerticalDivider(color: Colors.grey.withOpacity(0.5)),
+                      }, */
+                        ),
+                    //VerticalDivider(color: Colors.grey.withOpacity(0.5)),
                   ],
                 ),
-              ),
+              ), */
               border: OutlineInputBorder(
                 borderRadius: BorderRadius.circular(10),
                 borderSide: BorderSide(color: Colors.grey.shade300),
@@ -667,8 +668,8 @@ class SignInScreenState extends State<SignInScreen>
             ),
             validator: (String? value) {
               if (value!.isEmpty) return language.thisFieldRequired;
-              if (value.length < 6)
-                return 'كلمة المرور يجب أن تكون 6 أحرف على الأقل';
+              if (value.length < 8)
+                return 'كلمة المرور يجب أن تكون 8 أحرف على الأقل';
               return null;
             },
           ),
@@ -700,8 +701,8 @@ class SignInScreenState extends State<SignInScreen>
             ),
             validator: (String? value) {
               if (value!.isEmpty) return language.thisFieldRequired;
-              if (value.length < 6)
-                return 'كلمة المرور يجب أن تكون 6 أحرف على الأقل';
+              if (value.length < 8)
+                return 'كلمة المرور يجب أن تكون 8 أحرف على الأقل';
               if (value.trim() != signUpPasswordController.text.trim())
                 return 'كلمتا المرور غير متطابقتين';
               return null;

@@ -21,6 +21,11 @@ public final class GeneratedPluginRegistrant {
       Log.e(TAG, "Error registering plugin audio_session, com.ryanheise.audio_session.AudioSessionPlugin", e);
     }
     try {
+      flutterEngine.getPlugins().add(new xyz.luan.audioplayers.AudioplayersPlugin());
+    } catch (Exception e) {
+      Log.e(TAG, "Error registering plugin audioplayers_android, xyz.luan.audioplayers.AudioplayersPlugin", e);
+    }
+    try {
       flutterEngine.getPlugins().add(new io.flutter.plugins.firebase.firestore.FlutterFirebaseFirestorePlugin());
     } catch (Exception e) {
       Log.e(TAG, "Error registering plugin cloud_firestore, io.flutter.plugins.firebase.firestore.FlutterFirebaseFirestorePlugin", e);
@@ -61,9 +66,24 @@ public final class GeneratedPluginRegistrant {
       Log.e(TAG, "Error registering plugin firebase_database, io.flutter.plugins.firebase.database.FirebaseDatabasePlugin", e);
     }
     try {
+      flutterEngine.getPlugins().add(new eu.wroblewscy.marcin.floating.floating.FloatingPlugin());
+    } catch (Exception e) {
+      Log.e(TAG, "Error registering plugin floating, eu.wroblewscy.marcin.floating.floating.FloatingPlugin", e);
+    }
+    try {
+      flutterEngine.getPlugins().add(new com.hiennv.flutter_callkit_incoming.FlutterCallkitIncomingPlugin());
+    } catch (Exception e) {
+      Log.e(TAG, "Error registering plugin flutter_callkit_incoming_yoer, com.hiennv.flutter_callkit_incoming.FlutterCallkitIncomingPlugin", e);
+    }
+    try {
       flutterEngine.getPlugins().add(new com.fluttercandies.flutter_image_compress.ImageCompressPlugin());
     } catch (Exception e) {
       Log.e(TAG, "Error registering plugin flutter_image_compress_common, com.fluttercandies.flutter_image_compress.ImageCompressPlugin", e);
+    }
+    try {
+      flutterEngine.getPlugins().add(new com.flutter.logs.plogs.flutter_logs.FlutterLogsPlugin());
+    } catch (Exception e) {
+      Log.e(TAG, "Error registering plugin flutter_logs, com.flutter.logs.plogs.flutter_logs.FlutterLogsPlugin", e);
     }
     try {
       flutterEngine.getPlugins().add(new com.jayesh.flutter_native_contact_picker.FlutterNativeContactPickerPlugin());
@@ -79,6 +99,11 @@ public final class GeneratedPluginRegistrant {
       flutterEngine.getPlugins().add(new io.inway.ringtone.player.FlutterRingtonePlayerPlugin());
     } catch (Exception e) {
       Log.e(TAG, "Error registering plugin flutter_ringtone_player, io.inway.ringtone.player.FlutterRingtonePlayerPlugin", e);
+    }
+    try {
+      flutterEngine.getPlugins().add(new com.yosemiteyss.flutter_volume_controller.FlutterVolumeControllerPlugin());
+    } catch (Exception e) {
+      Log.e(TAG, "Error registering plugin flutter_volume_controller, com.yosemiteyss.flutter_volume_controller.FlutterVolumeControllerPlugin", e);
     }
     try {
       flutterEngine.getPlugins().add(new io.github.ponnamkarthik.toast.fluttertoast.FlutterToastPlugin());
@@ -126,6 +151,11 @@ public final class GeneratedPluginRegistrant {
       Log.e(TAG, "Error registering plugin map_launcher, com.alexmiller.map_launcher.MapLauncherPlugin", e);
     }
     try {
+      flutterEngine.getPlugins().add(new com.github.rmtmckenzie.native_device_orientation.NativeDeviceOrientationPlugin());
+    } catch (Exception e) {
+      Log.e(TAG, "Error registering plugin native_device_orientation, com.github.rmtmckenzie.native_device_orientation.NativeDeviceOrientationPlugin", e);
+    }
+    try {
       flutterEngine.getPlugins().add(new com.onesignal.flutter.OneSignalPlugin());
     } catch (Exception e) {
       Log.e(TAG, "Error registering plugin onesignal_flutter, com.onesignal.flutter.OneSignalPlugin", e);
@@ -171,6 +201,11 @@ public final class GeneratedPluginRegistrant {
       Log.e(TAG, "Error registering plugin url_launcher_android, io.flutter.plugins.urllauncher.UrlLauncherPlugin", e);
     }
     try {
+      flutterEngine.getPlugins().add(new com.benjaminabel.vibration.VibrationPlugin());
+    } catch (Exception e) {
+      Log.e(TAG, "Error registering plugin vibration, com.benjaminabel.vibration.VibrationPlugin", e);
+    }
+    try {
       flutterEngine.getPlugins().add(new io.flutter.plugins.videoplayer.VideoPlayerPlugin());
     } catch (Exception e) {
       Log.e(TAG, "Error registering plugin video_player_android, io.flutter.plugins.videoplayer.VideoPlayerPlugin", e);
@@ -184,6 +219,36 @@ public final class GeneratedPluginRegistrant {
       flutterEngine.getPlugins().add(new io.flutter.plugins.webviewflutter.WebViewFlutterPlugin());
     } catch (Exception e) {
       Log.e(TAG, "Error registering plugin webview_flutter_android, io.flutter.plugins.webviewflutter.WebViewFlutterPlugin", e);
+    }
+    try {
+      flutterEngine.getPlugins().add(new im.zego.zego_express_engine.ZegoExpressEnginePlugin());
+    } catch (Exception e) {
+      Log.e(TAG, "Error registering plugin zego_express_engine, im.zego.zego_express_engine.ZegoExpressEnginePlugin", e);
+    }
+    try {
+      flutterEngine.getPlugins().add(new com.zegocloud.uikit.zego_uikit_plugin.ZegoUikitPlugin());
+    } catch (Exception e) {
+      Log.e(TAG, "Error registering plugin zego_uikit, com.zegocloud.uikit.zego_uikit_plugin.ZegoUikitPlugin", e);
+    }
+    try {
+      flutterEngine.getPlugins().add(new com.zegocloud.uikit.call_plugin.ZegoUIKitCallPlugin());
+    } catch (Exception e) {
+      Log.e(TAG, "Error registering plugin zego_uikit_prebuilt_call, com.zegocloud.uikit.call_plugin.ZegoUIKitCallPlugin", e);
+    }
+    try {
+      flutterEngine.getPlugins().add(new com.zegocloud.uikit.flutter.signal_plugin.zego_uikit_signaling_plugin.ZegoUikitSignalingPlugin());
+    } catch (Exception e) {
+      Log.e(TAG, "Error registering plugin zego_uikit_signaling_plugin, com.zegocloud.uikit.flutter.signal_plugin.zego_uikit_signaling_plugin.ZegoUikitSignalingPlugin", e);
+    }
+    try {
+      flutterEngine.getPlugins().add(new im.zego.zim_flutter.ZegoZimPlugin());
+    } catch (Exception e) {
+      Log.e(TAG, "Error registering plugin zego_zim, im.zego.zim_flutter.ZegoZimPlugin", e);
+    }
+    try {
+      flutterEngine.getPlugins().add(new im.zego.zpns_flutter.ZegoZpnsPlugin());
+    } catch (Exception e) {
+      Log.e(TAG, "Error registering plugin zego_zpns, im.zego.zpns_flutter.ZegoZpnsPlugin", e);
     }
   }
 }

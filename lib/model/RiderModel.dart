@@ -65,7 +65,6 @@ class RiderModel {
   num? tips;
   List<MultiDropLocation>? multiDropLocation;
 
-
   RiderModel({
     this.amount,
     this.baseFare,
@@ -203,7 +202,9 @@ class RiderModel {
       canceLationCharges: int.tryParse(json['cancelation_charges'].toString()),
       ride_has_bids: int.tryParse(json['ride_has_bids'].toString()),
       coupon: json['coupon'],
-      couponData: json['coupon_data'] != null ? CouponData.fromJson(json['coupon_data']) : null,
+      couponData: json['coupon_data'] != null
+          ? CouponData.fromJson(json['coupon_data'])
+          : null,
       createdAt: json['created_at'],
       datetime: json['datetime'],
       distance: json['distance'],
@@ -215,15 +216,23 @@ class RiderModel {
       endLatitude: json['end_latitude'],
       endLongitude: json['end_longitude'],
       endTime: json['end_time'],
-      extraCharges: json['extra_charges'] != null ? (json['extra_charges'] as List).map((i) => ExtraChargeRequestModel.fromJson(i)).toList() : null,
+      extraCharges: json['extra_charges'] != null
+          ? (json['extra_charges'] as List)
+              .map((i) => ExtraChargeRequestModel.fromJson(i))
+              .toList()
+          : null,
       id: int.tryParse(json['id'].toString()),
       isDriverRated: int.tryParse(json['is_driver_rated'].toString()),
       isRiderRated: int.tryParse(json['is_rider_rated'].toString()),
       isSchedule: int.tryParse(json['is_schedule'].toString()),
-      maxTimeForFindDriverForRideRequest: int.tryParse(json['max_time_for_find_driver_for_ride_request'].toString()),
+      maxTimeForFindDriverForRideRequest: int.tryParse(
+          json['max_time_for_find_driver_for_ride_request'].toString()),
       minimumFare: json['minimum_fare'],
       otp: json['otp'],
-      multiDropLocation:json["multi_drop_location"] == null ? [] : List<MultiDropLocation>.from(json["multi_drop_location"]!.map((x) => MultiDropLocation.fromJson(x))),
+      multiDropLocation: json["multi_drop_location"] == null
+          ? []
+          : List<MultiDropLocation>.from(json["multi_drop_location"]!
+              .map((x) => MultiDropLocation.fromJson(x))),
       paymentId: int.tryParse(json['payment_id'].toString()),
       paymentStatus: json['payment_status'],
       paymentType: json['payment_type'],
@@ -256,7 +265,9 @@ class RiderModel {
       perMinuteWaitingCharge: json['per_minute_waiting_charge'],
       riderContactNumber: json['rider_contact_number'],
       driverContactNumber: json['driver_contact_number'],
-      otherRiderData: json['other_rider_data'] != null ? OtherRiderData.fromJson(json['other_rider_data']) : null,
+      otherRiderData: json['other_rider_data'] != null
+          ? OtherRiderData.fromJson(json['other_rider_data'])
+          : null,
       tips: json['tips'],
       extraChargesAmount: json['extra_charges_amount'],
     );
@@ -286,7 +297,8 @@ class RiderModel {
     data['is_driver_rated'] = this.isDriverRated;
     data['is_rider_rated'] = this.isRiderRated;
     data['is_schedule'] = this.isSchedule;
-    data['max_time_for_find_driver_for_ride_request'] = this.maxTimeForFindDriverForRideRequest;
+    data['max_time_for_find_driver_for_ride_request'] =
+        this.maxTimeForFindDriverForRideRequest;
     data['minimum_fare'] = this.minimumFare;
     data['otp'] = this.otp;
     data['rider_email'] = this.riderEmail;
@@ -323,7 +335,8 @@ class RiderModel {
     data['extra_charges_amount'] = this.extraChargesAmount;
     data['tips'] = this.tips;
     if (this.extraCharges != null) {
-      data['extra_charges'] = this.extraCharges!.map((v) => v.toJson()).toList();
+      data['extra_charges'] =
+          this.extraCharges!.map((v) => v.toJson()).toList();
     }
     if (this.couponData != null) {
       data['coupon_data'] = this.couponData!.toJson();
@@ -331,8 +344,9 @@ class RiderModel {
     if (this.otherRiderData != null) {
       data['other_rider_data'] = this.otherRiderData!.toJson();
     }
-    if(multiDropLocation!=null){
-      data["multi_drop_location"]=List<dynamic>.from(multiDropLocation!.map((x) => x!.toJson()));
+    if (multiDropLocation != null) {
+      data["multi_drop_location"] =
+          List<dynamic>.from(multiDropLocation!.map((x) => x!.toJson()));
     }
     return data;
   }
@@ -372,19 +386,20 @@ class MultiDropLocation {
     required this.address,
   });
 
-  factory MultiDropLocation.fromJson(Map<String, dynamic> json) => MultiDropLocation(
-   drop: int.tryParse(json["drop"].toString())??0,
-    lat: double.tryParse(json["lat"].toString())??0.0,
-    lng: double.tryParse(json["lng"].toString())??0.0,
-    droppedAt: json["dropped_at"],
-    address: json["address"].toString(),
-  );
+  factory MultiDropLocation.fromJson(Map<String, dynamic> json) =>
+      MultiDropLocation(
+        drop: int.tryParse(json["drop"].toString()) ?? 0,
+        lat: double.tryParse(json["lat"].toString()) ?? 0.0,
+        lng: double.tryParse(json["lng"].toString()) ?? 0.0,
+        droppedAt: json["dropped_at"],
+        address: json["address"].toString(),
+      );
 
   Map<String, dynamic> toJson() => {
-    "drop": drop,
-    "lat": lat,
-    "lng": lng,
-    "dropped_at": droppedAt,
-    "address": address,
-  };
+        "drop": drop,
+        "lat": lat,
+        "lng": lng,
+        "dropped_at": droppedAt,
+        "address": address,
+      };
 }

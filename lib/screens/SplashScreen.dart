@@ -92,23 +92,11 @@ class SplashScreenState extends State<SplashScreen> {
             isNewTask: true, pageRouteAnimation: PageRouteAnimation.Slide);
       } else if (sharedPref.getString(UID).validate().isEmptyOrNull &&
           appStore.isLoggedIn) {
-        updateProfileUid().then((value) {
-          if (sharedPref.getInt(IS_Verified_Driver) == 1) {
-            launchScreen(context, MainScreen(),
-                isNewTask: true, pageRouteAnimation: PageRouteAnimation.Slide);
-          } else {
-            launchScreen(context, DocumentsScreen(isShow: true),
-                isNewTask: true, pageRouteAnimation: PageRouteAnimation.Slide);
-          }
+        updateProfileUid().then((value) async {
+          await _checkDocumentStatusAndNavigate();
         });
-      } else if (sharedPref.getInt(IS_Verified_Driver) == 0 &&
-          appStore.isLoggedIn) {
-        launchScreen(context, DocumentsScreen(isShow: true),
-            pageRouteAnimation: PageRouteAnimation.Slide, isNewTask: true);
       } else if (appStore.isLoggedIn) {
-        launchScreen(context, MainScreen(),
-            pageRouteAnimation: PageRouteAnimation.SlideBottomTop,
-            isNewTask: true);
+        await _checkDocumentStatusAndNavigate();
       } else {
         launchScreen(context, HomeScreen(),
             pageRouteAnimation: PageRouteAnimation.Slide, isNewTask: true);
@@ -219,6 +207,52 @@ class SplashScreenState extends State<SplashScreen> {
     } else {
       await Permission.notification.request();
       init();
+    }
+  }
+
+  // Add new method to check document status and navigate accordingly
+  // This ensures that:
+  // - Approved documents → MainScreen
+  // - Pending/Rejected documents → DocumentsScreen (fixed in place)
+  Future<void> _checkDocumentStatusAndNavigate() async {
+    try {
+      final docs = await getDriverDocumentList();
+
+      if (docs.data != null && docs.data!.isNotEmpty) {
+        bool hasApprovedDocuments =
+            docs.data!.any((doc) => doc.isVerified == 1);
+        bool hasPendingDocuments = docs.data!.any((doc) => doc.isVerified == 0);
+        bool hasRejectedDocuments =
+            docs.data!.any((doc) => doc.isVerified == 2);
+
+        if (hasApprovedDocuments &&
+            !hasPendingDocuments &&
+            !hasRejectedDocuments) {
+          launchScreen(context, MainScreen(),
+              pageRouteAnimation: PageRouteAnimation.SlideBottomTop,
+              isNewTask: true);
+        } else {
+          launchScreen(context, DocumentsScreen(isShow: true),
+              pageRouteAnimation: PageRouteAnimation.Slide, isNewTask: true);
+        }
+      } else {
+        if (sharedPref.getInt(IS_Verified_Driver) == 1) {
+          launchScreen(context, MainScreen(),
+              isNewTask: true, pageRouteAnimation: PageRouteAnimation.Slide);
+        } else {
+          launchScreen(context, DocumentsScreen(isShow: true),
+              isNewTask: true, pageRouteAnimation: PageRouteAnimation.Slide);
+        }
+      }
+    } catch (error) {
+      print('Error checking document status: $error');
+      if (sharedPref.getInt(IS_Verified_Driver) == 1) {
+        launchScreen(context, MainScreen(),
+            isNewTask: true, pageRouteAnimation: PageRouteAnimation.Slide);
+      } else {
+        launchScreen(context, DocumentsScreen(isShow: true),
+            isNewTask: true, pageRouteAnimation: PageRouteAnimation.Slide);
+      }
     }
   }
 }

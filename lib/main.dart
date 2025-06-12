@@ -20,11 +20,16 @@ import 'package:taxi_driver/utils/Common.dart';
 import 'package:taxi_driver/utils/Constants.dart';
 import 'package:taxi_driver/utils/Extensions/dataTypeExtensions.dart';
 import 'package:taxi_driver/test_api.dart';
+import 'package:zego_uikit_prebuilt_call/zego_uikit_prebuilt_call.dart';
+import 'package:zego_uikit_signaling_plugin/zego_uikit_signaling_plugin.dart';
+import 'package:zego_uikit/zego_uikit.dart';
 
 import 'AppTheme.dart';
 import 'Services/ChatMessagesService.dart';
 import 'Services/NotificationService.dart';
 import 'Services/UserServices.dart';
+import 'Services/DriverZegoService.dart';
+import 'Services/ZegoDebugHelper.dart';
 import 'firebase_options.dart';
 import 'languageConfiguration/AppLocalizations.dart';
 import 'languageConfiguration/BaseLanguage.dart';
@@ -64,6 +69,19 @@ var app_update_check = null;
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
+
+  // Print main initialization start
+  if (kDebugMode) {
+    print(
+        '\n🚀 ══════════════════════════════════════════════════════════════');
+    print('🚀 STARTING TAXI DRIVER APP WITH ZEGO INTEGRATION');
+    print(
+        '🚀 ══════════════════════════════════════════════════════════════\n');
+
+    // Print startup debug info
+    ZegoDebugHelper.printStartupInfo();
+  }
+
   await Firebase.initializeApp(
     options: DefaultFirebaseOptions.currentPlatform,
   );
@@ -104,10 +122,93 @@ void main() async {
       isInitialization: true);
   initJsonFile();
   await oneSignalSettings();
+
+  // Enhanced Zego Debug Logging
+  if (kDebugMode) {
+    print(
+        '\n📞 ══════════════════════════════════════════════════════════════');
+    print('📞 INITIALIZING ZEGO SYSTEM CALLING UI');
+    print('📞 ══════════════════════════════════════════════════════════════');
+    print('📞 App ID: $ZEGO_APP_ID');
+    print('📞 App Sign: ${ZEGO_APP_SIGN.substring(0, 15)}...');
+    print('📞 Navigator Key: ${navigatorKey.toString()}');
+    print(
+        '📞 ══════════════════════════════════════════════════════════════\n');
+  }
+
+  // Set navigator key to ZegoUIKitPrebuiltCallInvitationService
+  try {
+    ZegoUIKitPrebuiltCallInvitationService().setNavigatorKey(navigatorKey);
+    if (kDebugMode) {
+      print('✅ Navigator key set successfully for Zego');
+    }
+  } catch (e) {
+    if (kDebugMode) {
+      print('❌ Failed to set navigator key: $e');
+    }
+  }
+
+  // Use system calling UI for offline call invitations with enhanced logging
+  try {
+    if (kDebugMode) {
+      print(
+          '\n🔧 ══════════════════════════════════════════════════════════════');
+      print('🔧 SETTING UP ZEGO SYSTEM CALLING UI');
+      print(
+          '🔧 ══════════════════════════════════════════════════════════════');
+    }
+
+    ZegoUIKit().initLog().then((value) {
+      if (kDebugMode) {
+        print('📱 Zego UIKit log initialized');
+        print('🔧 Setting up system calling UI with signaling plugin...');
+      }
+
+      ZegoUIKitPrebuiltCallInvitationService().useSystemCallingUI(
+        [ZegoUIKitSignalingPlugin()],
+      );
+
+      if (kDebugMode) {
+        print(
+            '🎉 ══════════════════════════════════════════════════════════════');
+        print('🎉 ZEGO SYSTEM CALLING UI SUCCESSFULLY INITIALIZED!');
+        print('🎉 ✅ Ready to receive offline call invitations');
+        print('🎉 ✅ Native calling interface active');
+        print('🎉 ✅ Signaling plugin configured');
+        print(
+            '🎉 ══════════════════════════════════════════════════════════════\n');
+
+        // Setup debug mode after successful initialization
+        ZegoDebugHelper.setupDebugMode();
+      }
+    }).catchError((error) {
+      if (kDebugMode) {
+        print(
+            '❌ ══════════════════════════════════════════════════════════════');
+        print('❌ ZEGO SYSTEM CALLING UI INITIALIZATION FAILED!');
+        print('❌ Error: $error');
+        print(
+            '❌ ══════════════════════════════════════════════════════════════\n');
+      }
+    });
+  } catch (e) {
+    if (kDebugMode) {
+      print('❌ Exception during Zego setup: $e');
+    }
+  }
+
   SystemChrome.setPreferredOrientations([
     DeviceOrientation.portraitUp,
     DeviceOrientation.portraitDown,
   ]);
+
+  if (kDebugMode) {
+    print(
+        '\n🏁 ══════════════════════════════════════════════════════════════');
+    print('🏁 MAIN INITIALIZATION COMPLETE - LAUNCHING APP');
+    print(
+        '🏁 ══════════════════════════════════════════════════════════════\n');
+  }
 
   runApp(MyApp());
 }
