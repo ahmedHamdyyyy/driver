@@ -23,6 +23,8 @@ import '../utils/Extensions/ConformationDialog.dart';
 import '../utils/Images.dart';
 import 'DashboardScreen.dart';
 import 'RideHistoryScreen.dart';
+import 'package:taxi_driver/Services/DriverZegoService.dart';
+import 'package:taxi_driver/components/ModernCallDialog.dart';
 
 class DetailScreen extends StatefulWidget {
   @override
@@ -43,6 +45,9 @@ class DetailScreenState extends State<DetailScreen> {
 
   bool currentScreen = true;
   bool paymentPressed = false;
+
+  // Add call state management
+  bool _isCallingInProgress = false;
 
   @override
   void initState() {
@@ -357,7 +362,7 @@ class DetailScreenState extends State<DetailScreen> {
           SizedBox(height: 10),
           riderModel!.distance != null
               ? Text(
-                  '${language.distance}: ${riderModel!.distance!.toStringAsFixed(2)} ${riderModel!.distanceUnit.toString()}',
+                  '${language.distance}: ${riderModel!.distance!.toStringAsFixed(digitAfterDecimal)} ${riderModel!.distanceUnit.toString()}',
                   style: boldTextStyle(size: 14))
               : Text(
                   '${language.distance}: -- ${riderModel!.distanceUnit.toString()}',
@@ -807,19 +812,47 @@ class DetailScreenState extends State<DetailScreen> {
               ),
               SizedBox(height: 10),
               InkWell(
-                onTap: () {
-                  launchUrl(
-                      Uri.parse(
-                          'tel:${riderModel!.otherRiderData!.conatctNumber.validate()}'),
-                      mode: LaunchMode.externalApplication);
-                },
+                onTap: _isCallingInProgress
+                    ? null
+                    : () {
+                        // Use modern Zego call system instead of system phone
+                        _showCallOptionsDialog();
+                      },
                 child: Row(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Icon(Icons.call_sharp, size: 18, color: Colors.green),
+                    Container(
+                      padding: EdgeInsets.all(4),
+                      decoration: BoxDecoration(
+                        color: _isCallingInProgress
+                            ? Colors.grey.withOpacity(0.1)
+                            : Colors.green.withOpacity(0.1),
+                        borderRadius: BorderRadius.circular(6),
+                        border: Border.all(
+                          color: _isCallingInProgress
+                              ? Colors.grey.withOpacity(0.3)
+                              : Colors.green.withOpacity(0.3),
+                        ),
+                      ),
+                      child: _isCallingInProgress
+                          ? SizedBox(
+                              width: 18,
+                              height: 18,
+                              child: CircularProgressIndicator(
+                                strokeWidth: 2,
+                                valueColor:
+                                    AlwaysStoppedAnimation<Color>(Colors.grey),
+                              ),
+                            )
+                          : Icon(Icons.call_sharp,
+                              size: 18, color: Colors.green),
+                    ),
                     SizedBox(width: 8),
-                    Text(riderModel!.otherRiderData!.conatctNumber.validate(),
-                        style: primaryTextStyle())
+                    Expanded(
+                      child: Text(
+                          riderModel!.otherRiderData!.conatctNumber.validate(),
+                          style: primaryTextStyle()),
+                    ),
                   ],
                 ),
               ),
@@ -828,5 +861,189 @@ class DetailScreenState extends State<DetailScreen> {
         ),
       ],
     );
+  }
+
+  // Show call options dialog for additional rider
+  void _showCallOptionsDialog() {
+    showDialog(
+      context: context,
+      builder: (BuildContext context) {
+        return AlertDialog(
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(16),
+          ),
+          title: Row(
+            children: [
+              Icon(Icons.phone, color: primaryColor),
+              SizedBox(width: 12),
+              Text(
+                "إجراء مكالمة",
+                style: boldTextStyle(size: 18),
+              ),
+            ],
+          ),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(
+                "هل تريد الاتصال بـ ${riderModel!.otherRiderData!.name.validate()}؟",
+                style: secondaryTextStyle(size: 14),
+                textAlign: TextAlign.center,
+              ),
+              SizedBox(height: 20),
+              SizedBox(
+                width: double.infinity,
+                child: ElevatedButton.icon(
+                  onPressed: () {
+                    Navigator.of(context).pop();
+                    _callOtherRider(false); // Voice call only
+                  },
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.green,
+                    padding: EdgeInsets.symmetric(vertical: 14),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                  ),
+                  icon: Icon(Icons.phone, color: Colors.white),
+                  label: Text(
+                    "اتصال صوتي",
+                    style: boldTextStyle(color: Colors.white, size: 16),
+                  ),
+                ),
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(),
+              child: Text(
+                "إلغاء",
+                style: secondaryTextStyle(size: 14),
+              ),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  // Modern Zego call functionality for other rider
+  Future<void> _callOtherRider(bool isVideoCall) async {
+    // Prevent multiple simultaneous calls
+    if (_isCallingInProgress) {
+      toast("مكالمة قيد التقدم بالفعل...");
+      return;
+    }
+
+    if (riderModel?.otherRiderData?.conatctNumber?.isEmpty ?? true) {
+      toast("رقم هاتف الراكب غير متوفر");
+      return;
+    }
+
+    setState(() {
+      _isCallingInProgress = true;
+    });
+
+    try {
+      // Ensure Zego service is active
+      if (!DriverZegoService.isLoggedIn) {
+        toast("جاري تجهيز خدمة المكالمات...");
+        bool loginResult = await DriverZegoService.autoLoginDriver();
+
+        if (!loginResult) {
+          toast("فشل في تفعيل خدمة المكالمات");
+          return;
+        }
+      }
+
+      final riderPhone = riderModel!.otherRiderData!.conatctNumber.validate();
+      final riderName = riderModel!.otherRiderData!.name.validate();
+
+      // Show modern professional call dialog
+      showDialog(
+        context: context,
+        barrierDismissible: false,
+        builder: (context) => ModernCallDialog(
+          riderName: riderName,
+          riderPhone: riderPhone,
+          isVideoCall: isVideoCall,
+          onCancel: () {
+            Navigator.of(context).pop();
+            setState(() {
+              _isCallingInProgress = false;
+            });
+            toast("تم إلغاء المكالمة");
+          },
+        ),
+      );
+
+      // Add slight delay for better UX
+      await Future.delayed(Duration(milliseconds: 1500));
+
+      // Call the rider
+      bool callResult = await DriverZegoService.callRider(
+        riderPhoneNumber: riderPhone,
+        context: context,
+        riderName: riderName,
+        isVideoCall: isVideoCall,
+      );
+
+      // Close modern loading dialog
+      Navigator.pop(context);
+
+      if (callResult) {
+        // Show modern success dialog
+        showDialog(
+          context: context,
+          barrierDismissible: true,
+          builder: (context) => CallSuccessDialog(
+            riderName: riderName,
+            isVideoCall: isVideoCall,
+            onClose: () => Navigator.of(context).pop(),
+          ),
+        );
+      } else {
+        // Show modern error dialog with retry option
+        showDialog(
+          context: context,
+          barrierDismissible: true,
+          builder: (context) => CallErrorDialog(
+            errorMessage: "فشل في إرسال طلب الاتصال. يرجى المحاولة مرة أخرى.",
+            onRetry: () {
+              Navigator.of(context).pop();
+              _callOtherRider(isVideoCall);
+            },
+            onClose: () => Navigator.of(context).pop(),
+          ),
+        );
+      }
+    } catch (e) {
+      // Close loading dialog if open
+      if (Navigator.canPop(context)) {
+        Navigator.pop(context);
+      }
+
+      // Show modern error dialog
+      showDialog(
+        context: context,
+        barrierDismissible: true,
+        builder: (context) => CallErrorDialog(
+          errorMessage: "حدث خطأ أثناء الاتصال: ${e.toString()}",
+          onRetry: () {
+            Navigator.of(context).pop();
+            _callOtherRider(isVideoCall);
+          },
+          onClose: () => Navigator.of(context).pop(),
+        ),
+      );
+
+      print("🔴 DetailScreen call error: $e");
+    } finally {
+      // Reset call state
+      setState(() {
+        _isCallingInProgress = false;
+      });
+    }
   }
 }
