@@ -14,6 +14,8 @@ import 'package:taxi_driver/utils/Colors.dart';
 import 'package:taxi_driver/utils/Extensions/app_common.dart';
 import 'package:taxi_driver/utils/Extensions/dataTypeExtensions.dart';
 import 'package:taxi_driver/utils/Images.dart';
+import 'package:taxi_driver/components/CallRiderWidget.dart';
+import 'package:taxi_driver/Services/DriverZegoService.dart';
 
 import '../core/widget/appbar/back_app_bar.dart';
 import '../main.dart';
@@ -105,6 +107,80 @@ class RideDetailScreenState extends State<RideDetailScreen> {
   @override
   void setState(fn) {
     if (mounted) super.setState(fn);
+  }
+
+  // Call rider method
+  Future<void> _callRider(bool isVideoCall) async {
+    if (riderModel?.riderContactNumber == null ||
+        riderModel!.riderContactNumber!.isEmpty) {
+      toast("رقم هاتف الراكب غير متوفر");
+      return;
+    }
+
+    try {
+      // Ensure Zego service is active
+      if (!DriverZegoService.isLoggedIn) {
+        toast("جاري تجهيز خدمة المكالمات...");
+        bool loginResult = await DriverZegoService.autoLoginDriver();
+
+        if (!loginResult) {
+          toast("فشل في تفعيل خدمة المكالمات");
+          return;
+        }
+      }
+
+      // Show loading dialog
+      showDialog(
+        context: context,
+        barrierDismissible: false,
+        builder: (context) => Center(
+          child: Container(
+            padding: EdgeInsets.all(20),
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                CircularProgressIndicator(color: primaryColor),
+                SizedBox(height: 16),
+                Text(
+                  isVideoCall
+                      ? "جاري بدء مكالمة فيديو..."
+                      : "جاري بدء مكالمة صوتية...",
+                  style: boldTextStyle(size: 16),
+                ),
+              ],
+            ),
+          ),
+        ),
+      );
+
+      // Call the rider
+      bool callResult = await DriverZegoService.callRider(
+        riderPhoneNumber: riderModel!.riderContactNumber!,
+        context: context,
+        riderName: riderModel!.riderName,
+        isVideoCall: isVideoCall,
+      );
+
+      // Close loading dialog
+      Navigator.pop(context);
+
+      if (callResult) {
+        toast("تم إرسال طلب الاتصال للراكب! 📞");
+      } else {
+        toast("فشل في الاتصال بالراكب");
+      }
+    } catch (e) {
+      // Close loading dialog if open
+      if (Navigator.canPop(context)) {
+        Navigator.pop(context);
+      }
+
+      toast("حدث خطأ أثناء الاتصال: ${e.toString()}");
+    }
   }
 
   String _getArabicStatus(String? status) {
@@ -472,30 +548,74 @@ class RideDetailScreenState extends State<RideDetailScreen> {
                   ],
                 ),
               ),
-              if (isChatHistory == true)
-                InkWell(
-                  onTap: () {
-                    if (riderModel?.id != null) {
-                      launchScreen(
-                        context,
-                        ChatScreen(rideId: riderModel!.id!),
-                      );
-                    }
-                  },
-                  child: Container(
-                    padding: EdgeInsets.all(8.r),
-                    decoration: BoxDecoration(
-                      color: Colors.green.withOpacity(0.1),
-                      borderRadius: BorderRadius.circular(8.r),
-                      border: Border.all(color: Colors.green.withOpacity(0.3)),
-                    ),
-                    child: Icon(
-                      Icons.chat,
-                      color: Colors.green,
-                      size: 20.r,
+              Row(
+                children: [
+                  // Voice Call Button
+                  InkWell(
+                    onTap: () => _callRider(false),
+                    child: Container(
+                      padding: EdgeInsets.all(8.r),
+                      decoration: BoxDecoration(
+                        color: Colors.green.withOpacity(0.1),
+                        borderRadius: BorderRadius.circular(8.r),
+                        border:
+                            Border.all(color: Colors.green.withOpacity(0.3)),
+                      ),
+                      child: Icon(
+                        Icons.phone,
+                        color: Colors.green,
+                        size: 20.r,
+                      ),
                     ),
                   ),
-                ),
+                  SizedBox(width: 8.w),
+                  // Video Call Button
+                  InkWell(
+                    onTap: () => _callRider(true),
+                    child: Container(
+                      padding: EdgeInsets.all(8.r),
+                      decoration: BoxDecoration(
+                        color: primaryColor.withOpacity(0.1),
+                        borderRadius: BorderRadius.circular(8.r),
+                        border:
+                            Border.all(color: primaryColor.withOpacity(0.3)),
+                      ),
+                      child: Icon(
+                        Icons.videocam,
+                        color: primaryColor,
+                        size: 20.r,
+                      ),
+                    ),
+                  ),
+                  SizedBox(width: 8.w),
+                  // Chat Button
+                  if (isChatHistory == true)
+                    InkWell(
+                      onTap: () {
+                        if (riderModel?.id != null) {
+                          launchScreen(
+                            context,
+                            ChatScreen(rideId: riderModel!.id!),
+                          );
+                        }
+                      },
+                      child: Container(
+                        padding: EdgeInsets.all(8.r),
+                        decoration: BoxDecoration(
+                          color: Colors.orange.withOpacity(0.1),
+                          borderRadius: BorderRadius.circular(8.r),
+                          border:
+                              Border.all(color: Colors.orange.withOpacity(0.3)),
+                        ),
+                        child: Icon(
+                          Icons.chat,
+                          color: Colors.orange,
+                          size: 20.r,
+                        ),
+                      ),
+                    ),
+                ],
+              ),
             ],
           ),
         ],
