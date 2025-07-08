@@ -26,7 +26,13 @@ class DriverRegisterScreen extends StatefulWidget {
   final String? termsConditionUrl;
   final String? userName;
 
-  DriverRegisterScreen({this.socialLogin = false, this.userName, this.isOtp = false, this.countryCode, this.privacyPolicyUrl, this.termsConditionUrl});
+  DriverRegisterScreen(
+      {this.socialLogin = false,
+      this.userName,
+      this.isOtp = false,
+      this.countryCode,
+      this.privacyPolicyUrl,
+      this.termsConditionUrl});
 
   @override
   DriverRegisterScreenState createState() => DriverRegisterScreenState();
@@ -103,17 +109,25 @@ class DriverRegisterScreenState extends State<DriverRegisterScreen> {
     if (formKey.currentState!.validate()) {
       formKey.currentState!.save();
       if (isAcceptedTc) {
+        if (listServices.isEmpty) {
+          return toast(language.pleaseSelectService);
+        }
         appStore.setLoading(true);
         Map req = {
           'first_name': firstController.text.trim(),
           'last_name': lastNameController.text.trim(),
-          'username': widget.socialLogin ? widget.userName : userNameController.text.trim(),
+          'username': widget.socialLogin
+              ? widget.userName
+              : userNameController.text.trim(),
           'email': emailController.text.trim(),
           "user_type": "driver",
-          "contact_number": widget.socialLogin ? '${widget.userName}' : '${phoneController.text.trim()}',
-          // "contact_number": widget.socialLogin ? '${widget.countryCode}${widget.userName}' : '$countryCode${phoneController.text.trim()}',
-          "country_code": widget.socialLogin ? '${widget.countryCode}' : '$countryCode',
-          'password': widget.socialLogin ? widget.userName : passController.text.trim(),
+          "contact_number": widget.socialLogin
+              ? '${widget.userName}'
+              : '${phoneController.text.trim()}',
+          "country_code":
+              widget.socialLogin ? '${widget.countryCode}' : '$countryCode',
+          'password':
+              widget.socialLogin ? widget.userName : passController.text.trim(),
           "player_id": sharedPref.getString(PLAYER_ID).validate(),
           if (widget.socialLogin) 'login_type': LoginTypeOTP,
           "user_detail": {
@@ -128,12 +142,18 @@ class DriverRegisterScreenState extends State<DriverRegisterScreen> {
         await signUpApi(req).then((value) {
           authService
               .signUpWithEmailPassword(context,
-                  mobileNumber: widget.socialLogin ? '${widget.countryCode}${widget.userName}' : '$countryCode${phoneController.text.trim()}',
+                  mobileNumber: widget.socialLogin
+                      ? '${widget.countryCode}${widget.userName}'
+                      : '$countryCode${phoneController.text.trim()}',
                   email: emailController.text.trim(),
                   fName: firstController.text.trim(),
                   lName: lastNameController.text.trim(),
-                  userName: widget.socialLogin ? widget.userName : userNameController.text.trim(),
-                  password: widget.socialLogin ? widget.userName : passController.text.trim(),
+                  userName: widget.socialLogin
+                      ? widget.userName
+                      : userNameController.text.trim(),
+                  password: widget.socialLogin
+                      ? widget.userName
+                      : passController.text.trim(),
                   userType: 'driver',
                   isOtpLogin: widget.socialLogin)
               .then((res) async {
@@ -194,7 +214,9 @@ class DriverRegisterScreenState extends State<DriverRegisterScreen> {
               steps: [
                 Step(
                   isActive: currentIndex <= 0,
-                  state: currentIndex <= 0 ? StepState.disabled : StepState.complete,
+                  state: currentIndex <= 0
+                      ? StepState.disabled
+                      : StepState.complete,
                   title: Text(language.userDetail, style: boldTextStyle()),
                   content: Form(
                     key: formKeys[0],
@@ -209,8 +231,10 @@ class DriverRegisterScreenState extends State<DriverRegisterScreen> {
                                 controller: firstController,
                                 focus: firstNameFocus,
                                 nextFocus: lastNameFocus,
-                                errorThisFieldRequired: language.thisFieldRequired,
-                                decoration: inputDecoration(context, label: language.firstName),
+                                errorThisFieldRequired:
+                                    language.thisFieldRequired,
+                                decoration: inputDecoration(context,
+                                    label: language.firstName),
                               ),
                             ),
                             SizedBox(width: 16),
@@ -220,184 +244,193 @@ class DriverRegisterScreenState extends State<DriverRegisterScreen> {
                                 controller: lastNameController,
                                 focus: lastNameFocus,
                                 nextFocus: emailFocus,
-                                errorThisFieldRequired: language.thisFieldRequired,
-                                decoration: inputDecoration(context, label: language.lastName),
+                                errorThisFieldRequired:
+                                    language.thisFieldRequired,
+                                decoration: inputDecoration(context,
+                                    label: language.lastName),
                               ),
                             ),
                           ],
                         ),
                         SizedBox(height: 16),
-                        Row(
-                          children: [
-                            Expanded(
-                              child: AppTextField(
-                                textFieldType: TextFieldType.EMAIL,
-                                focus: emailFocus,
-                                controller: emailController,
-                                nextFocus: userNameFocus,
-                                errorThisFieldRequired: language.thisFieldRequired,
-                                decoration: inputDecoration(context, label: language.email),
-                              ),
-                            ),
-                            SizedBox(width: 16),
-                            if (widget.socialLogin != true)
-                              Expanded(
-                                child: AppTextField(
-                                  textFieldType: TextFieldType.USERNAME,
-                                  focus: userNameFocus,
-                                  controller: userNameController,
-                                  nextFocus: phoneFocus,
-                                  errorThisFieldRequired: language.thisFieldRequired,
-                                  decoration: inputDecoration(context, label: language.userName),
-                                ),
-                              ),
-                          ],
+                        AppTextField(
+                          textFieldType: TextFieldType.EMAIL,
+                          controller: emailController,
+                          focus: emailFocus,
+                          nextFocus: userNameFocus,
+                          errorThisFieldRequired: language.thisFieldRequired,
+                          decoration:
+                              inputDecoration(context, label: language.email),
                         ),
-                        if (widget.socialLogin != true) SizedBox(height: 16),
-                        if (widget.socialLogin != true)
-                          AppTextField(
-                            controller: phoneController,
-                            textFieldType: TextFieldType.PHONE,
-                            focus: phoneFocus,
-                            nextFocus: passFocus,
-                            decoration: inputDecoration(
-                              context,
-                              label: language.phoneNumber,
-                              prefixIcon: IntrinsicHeight(
-                                child: Row(
-                                  mainAxisSize: MainAxisSize.min,
-                                  children: [
-                                    CountryCodePicker(
-                                      padding: EdgeInsets.zero,
-                                      initialSelection: countryCode,
-                                      showCountryOnly: false,
-                                      dialogSize: Size(MediaQuery.of(context).size.width - 60, MediaQuery.of(context).size.height * 0.6),
-                                      showFlag: true,
-                                      showFlagDialog: true,
-                                      showOnlyCountryWhenClosed: false,
-                                      alignLeft: false,
-                                      textStyle: primaryTextStyle(),
-                                      dialogBackgroundColor: Theme.of(context).cardColor,
-                                      barrierColor: Colors.black12,
-                                      dialogTextStyle: primaryTextStyle(),
-                                      searchDecoration: InputDecoration(
-                                        iconColor: Theme.of(context).dividerColor,
-                                        enabledBorder: UnderlineInputBorder(borderSide: BorderSide(color: Theme.of(context).dividerColor)),
-                                        focusedBorder: UnderlineInputBorder(borderSide: BorderSide(color: primaryColor)),
-                                      ),
-                                      searchStyle: primaryTextStyle(),
-                                      onInit: (c) {
-                                        countryCode = c!.dialCode!;
-                                      },
-                                      onChanged: (c) {
-                                        countryCode = c.dialCode!;
-                                      },
-                                    ),
-                                    VerticalDivider(color: Colors.grey.withOpacity(0.5)),
-                                  ],
-                                ),
-                              ),
-                            ),
-                            validator: (value) {
-                              if (value!.trim().isEmpty) return language.thisFieldRequired;
-                              return null;
-                            },
-                          ),
-                        if (widget.socialLogin != true) SizedBox(height: 16),
-                        if (widget.socialLogin != true)
-                          AppTextField(
-                            controller: passController,
-                            focus: passFocus,
-                            autoFocus: false,
-                            textFieldType: TextFieldType.PASSWORD,
-                            errorThisFieldRequired: language.thisFieldRequired,
-                            decoration: inputDecoration(context, label: language.password),
-                          ),
+                        SizedBox(height: 16),
+                        AppTextField(
+                          textFieldType: TextFieldType.USERNAME,
+                          controller: userNameController,
+                          focus: userNameFocus,
+                          nextFocus: phoneFocus,
+                          errorThisFieldRequired: language.thisFieldRequired,
+                          decoration: inputDecoration(context,
+                              label: language.userName),
+                        ),
+                        SizedBox(height: 16),
+                        AppTextField(
+                          textFieldType: TextFieldType.PHONE,
+                          controller: phoneController,
+                          focus: phoneFocus,
+                          nextFocus: passFocus,
+                          errorThisFieldRequired: language.thisFieldRequired,
+                          decoration: inputDecoration(context,
+                              label: language.phoneNumber),
+                        ),
+                        SizedBox(height: 16),
+                        AppTextField(
+                          textFieldType: TextFieldType.PASSWORD,
+                          controller: passController,
+                          focus: passFocus,
+                          errorThisFieldRequired: language.thisFieldRequired,
+                          decoration: inputDecoration(context,
+                              label: language.password),
+                        ),
                       ],
                     ),
                   ),
                 ),
                 Step(
                   isActive: currentIndex <= 1,
-                  state: currentIndex <= 1 ? StepState.disabled : StepState.complete,
+                  state: currentIndex <= 1
+                      ? StepState.disabled
+                      : StepState.complete,
                   title: Text(language.selectService, style: boldTextStyle()),
                   content: Form(
                     key: formKeys[1],
-                    child: listServices.isNotEmpty
-                        ? Column(
-                            children: listServices.map((e) {
-                              return inkWellWidget(
-                                onTap: () {
-                                  selectedService = listServices.indexOf(e);
-                                  setState(() {});
-                                },
-                                child: Container(
-                                  margin: EdgeInsets.only(
-                                    bottom: 8,
-                                  ),
-                                  padding: EdgeInsets.only(left: 16, right: 8, top: 4, bottom: 4),
-                                  decoration: BoxDecoration(
-                                    border: Border.all(color: selectedService == listServices.indexOf(e) ? Colors.green : primaryColor.withOpacity(0.5)),
-                                    borderRadius: BorderRadius.circular(defaultRadius),
-                                  ),
-                                  child: Row(
-                                    children: [
-                                      commonCachedNetworkImage(e.serviceImage, fit: BoxFit.contain, height: 50, width: 50),
-                                      SizedBox(width: 16),
-                                      Expanded(
-                                        child: Text(e.name.validate(), style: boldTextStyle()),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(language.chooseYourServiceType,
+                            style: primaryTextStyle()),
+                        SizedBox(height: 16),
+                        listServices.isNotEmpty
+                            ? Wrap(
+                                spacing: 16,
+                                runSpacing: 16,
+                                children: listServices.map((e) {
+                                  return GestureDetector(
+                                    onTap: () {
+                                      selectedService = listServices.indexOf(e);
+                                      setState(() {});
+                                    },
+                                    child: Container(
+                                      padding: EdgeInsets.all(16),
+                                      decoration: BoxDecoration(
+                                        border: Border.all(
+                                          color: selectedService ==
+                                                  listServices.indexOf(e)
+                                              ? Colors.green
+                                              : Colors.grey.withOpacity(0.3),
+                                          width: 2,
+                                        ),
+                                        borderRadius: BorderRadius.circular(12),
                                       ),
-                                      Visibility(
-                                        visible: selectedService == listServices.indexOf(e),
-                                        child: Icon(Icons.check_circle_outline, color: Colors.green),
-                                      )
-                                    ],
-                                  ),
-                                ),
-                              );
-                            }).toList(),
-                          )
-                        : emptyWidget(),
+                                      child: Row(
+                                        mainAxisSize: MainAxisSize.min,
+                                        children: [
+                                          commonCachedNetworkImage(
+                                              e.serviceImage,
+                                              fit: BoxFit.contain,
+                                              height: 50,
+                                              width: 50),
+                                          SizedBox(width: 16),
+                                          Expanded(
+                                            child: Column(
+                                              crossAxisAlignment:
+                                                  CrossAxisAlignment.start,
+                                              children: [
+                                                Text(e.name.validate(),
+                                                    style: boldTextStyle()),
+                                                if (e.capacity != null)
+                                                  Text(
+                                                      '${language.capacity}: ${e.capacity}',
+                                                      style:
+                                                          secondaryTextStyle()),
+                                              ],
+                                            ),
+                                          ),
+                                          Visibility(
+                                            visible: selectedService ==
+                                                listServices.indexOf(e),
+                                            child: Icon(Icons.check_circle,
+                                                color: Colors.green),
+                                          )
+                                        ],
+                                      ),
+                                    ),
+                                  );
+                                }).toList(),
+                              )
+                            : emptyWidget(),
+                      ],
+                    ),
                   ),
                 ),
                 Step(
                     isActive: currentIndex <= 2,
-                    state: currentIndex <= 2 ? StepState.disabled : StepState.complete,
+                    state: currentIndex <= 2
+                        ? StepState.disabled
+                        : StepState.complete,
                     title: Text(language.carModel, style: boldTextStyle()),
                     content: Form(
                       key: formKeys[2],
                       child: Padding(
                         padding: EdgeInsets.only(top: 4),
-                        child: AppTextField(textFieldType: TextFieldType.NAME, controller: carModelController, decoration: inputDecoration(context, label: language.carModel)),
+                        child: AppTextField(
+                            textFieldType: TextFieldType.NAME,
+                            controller: carModelController,
+                            decoration: inputDecoration(context,
+                                label: language.carModel)),
                       ),
                     )),
                 Step(
                   isActive: currentIndex <= 3,
-                  state: currentIndex <= 3 ? StepState.indexed : StepState.complete,
-                  title: Text(language.carProductionYear, style: boldTextStyle()),
+                  state: currentIndex <= 3
+                      ? StepState.indexed
+                      : StepState.complete,
+                  title:
+                      Text(language.carProductionYear, style: boldTextStyle()),
                   content: Form(
                     key: formKeys[3],
                     child: Padding(
                       padding: EdgeInsets.only(top: 4),
-                      child: AppTextField(textFieldType: TextFieldType.PHONE, controller: carProductionController, decoration: inputDecoration(context, label: language.carProductionYear)),
+                      child: AppTextField(
+                          textFieldType: TextFieldType.PHONE,
+                          controller: carProductionController,
+                          decoration: inputDecoration(context,
+                              label: language.carProductionYear)),
                     ),
                   ),
                 ),
                 Step(
                   isActive: currentIndex <= 4,
-                  state: currentIndex <= 4 ? StepState.disabled : StepState.complete,
+                  state: currentIndex <= 4
+                      ? StepState.disabled
+                      : StepState.complete,
                   title: Text(language.carPlateNumber, style: boldTextStyle()),
                   content: Form(
                     key: formKeys[4],
                     child: Padding(
                       padding: EdgeInsets.only(top: 4),
-                      child: AppTextField(textFieldType: TextFieldType.NAME, controller: carPlateController, decoration: inputDecoration(context, label: language.carPlateNumber)),
+                      child: AppTextField(
+                          textFieldType: TextFieldType.NAME,
+                          controller: carPlateController,
+                          decoration: inputDecoration(context,
+                              label: language.carPlateNumber)),
                     ),
                   ),
                 ),
                 Step(
                   isActive: currentIndex <= 5,
-                  state: currentIndex <= 5 ? StepState.disabled : StepState.complete,
+                  state: currentIndex <= 5
+                      ? StepState.disabled
+                      : StepState.complete,
                   title: Text(language.carColor, style: boldTextStyle()),
                   content: Form(
                     key: formKeys[5],
@@ -405,7 +438,11 @@ class DriverRegisterScreenState extends State<DriverRegisterScreen> {
                       children: [
                         Padding(
                           padding: EdgeInsets.only(top: 4),
-                          child: AppTextField(textFieldType: TextFieldType.NAME, controller: carColorController, decoration: inputDecoration(context, label: language.carColor)),
+                          child: AppTextField(
+                              textFieldType: TextFieldType.NAME,
+                              controller: carColorController,
+                              decoration: inputDecoration(context,
+                                  label: language.carColor)),
                         ),
                         SizedBox(height: 8),
                         CheckboxListTile(
@@ -414,27 +451,48 @@ class DriverRegisterScreenState extends State<DriverRegisterScreen> {
                           activeColor: primaryColor,
                           title: RichText(
                             text: TextSpan(children: [
-                              TextSpan(text: '${language.agreeToThe} ', style: secondaryTextStyle()),
+                              TextSpan(
+                                  text: '${language.agreeToThe} ',
+                                  style: secondaryTextStyle()),
                               TextSpan(
                                 text: language.termsConditions,
-                                style: boldTextStyle(color: primaryColor, size: 14),
+                                style: boldTextStyle(
+                                    color: primaryColor, size: 14),
                                 recognizer: TapGestureRecognizer()
                                   ..onTap = () {
-                                    if (widget.termsConditionUrl != null && widget.termsConditionUrl!.isNotEmpty) {
-                                      launchScreen(context, TermsConditionScreen(title: language.termsConditions, subtitle: widget.termsConditionUrl), pageRouteAnimation: PageRouteAnimation.Slide);
+                                    if (widget.termsConditionUrl != null &&
+                                        widget.termsConditionUrl!.isNotEmpty) {
+                                      launchScreen(
+                                          context,
+                                          TermsConditionScreen(
+                                              title: language.termsConditions,
+                                              subtitle:
+                                                  widget.termsConditionUrl),
+                                          pageRouteAnimation:
+                                              PageRouteAnimation.Slide);
                                     } else {
                                       toast(language.txtURLEmpty);
                                     }
                                   },
                               ),
-                              TextSpan(text: ' & ', style: secondaryTextStyle()),
+                              TextSpan(
+                                  text: ' & ', style: secondaryTextStyle()),
                               TextSpan(
                                 text: language.privacyPolicy,
-                                style: boldTextStyle(color: primaryColor, size: 14),
+                                style: boldTextStyle(
+                                    color: primaryColor, size: 14),
                                 recognizer: TapGestureRecognizer()
                                   ..onTap = () {
-                                    if (widget.privacyPolicyUrl != null && widget.privacyPolicyUrl!.isNotEmpty) {
-                                      launchScreen(context, TermsConditionScreen(title: language.privacyPolicy, subtitle: widget.privacyPolicyUrl), pageRouteAnimation: PageRouteAnimation.Slide);
+                                    if (widget.privacyPolicyUrl != null &&
+                                        widget.privacyPolicyUrl!.isNotEmpty) {
+                                      launchScreen(
+                                          context,
+                                          TermsConditionScreen(
+                                              title: language.privacyPolicy,
+                                              subtitle:
+                                                  widget.privacyPolicyUrl),
+                                          pageRouteAnimation:
+                                              PageRouteAnimation.Slide);
                                     } else {
                                       toast(language.txtURLEmpty);
                                     }

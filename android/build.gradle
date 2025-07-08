@@ -1,14 +1,13 @@
 buildscript {
-    ext.kotlin_version = '2.0.0'
+    ext.kotlin_version = '1.9.24'
     repositories {
         google()
         mavenCentral()
     }
 
     dependencies {
-        classpath 'com.android.tools.build:gradle:8.2.1'
+        classpath 'com.android.tools.build:gradle:8.1.0'
         classpath "org.jetbrains.kotlin:kotlin-gradle-plugin:$kotlin_version"
-        classpath 'com.google.gms:google-services:4.4.1'
     }
 }
 
@@ -16,14 +15,9 @@ allprojects {
     repositories {
         google()
         mavenCentral()
-        maven {
-            url 'https://oss.sonatype.org/content/repositories/snapshots/'
-        }
-        maven {
-            url 'https://cardinalcommerceprod.jfrog.io/artifactory/android'
-            credentials {
-                username 'android-team@cardinalcommerce.com'
-                password 'Gr+z0ld4@jP9'
+        configurations.all {
+            resolutionStrategy {
+                force "com.google.android.gms:play-services-location:21.0.1"
             }
         }
     }
@@ -46,7 +40,6 @@ subprojects {
     project.buildDir = "${rootProject.buildDir}/${project.name}"
     project.evaluationDependsOn(':app')
 }
-
 
 tasks.register("clean", Delete) {
     delete rootProject.buildDir

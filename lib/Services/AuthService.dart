@@ -82,7 +82,8 @@ class AuthServices {
       // Use Future.delayed to prevent immediate surface destruction
       await Future.delayed(Duration(milliseconds: 100));
 
-      createAuthUser(email, password, isOtpLogin).then((user) async {
+      try {
+        final user = await createAuthUser(email, password, isOtpLogin);
         if (user != null) {
           User currentUser = user;
 
@@ -102,9 +103,10 @@ class AuthServices {
           userModel.playerId = sharedPref.getString(PLAYER_ID).validate();
           sharedPref.setString(UID, user.uid.validate());
 
-          await userService
-              .addDocumentWithCustomId(currentUser.uid, userModel.toJson())
-              .then((value) async {
+          try {
+            await userService.addDocumentWithCustomId(
+                currentUser.uid, userModel.toJson());
+
             Map request = {
               "email": userModel.email,
               "password": password,
@@ -130,7 +132,8 @@ class AuthServices {
                   }
                 }
               } else {
-                await logInApi(request).then((res) async {
+                try {
+                  final res = await logInApi(request);
                   appStore.setLoading(false);
                   updateProfileUid();
 
@@ -146,37 +149,39 @@ class AuthServices {
                           isNewTask: true);
                     }
                   }
-                }).catchError((e) {
+                } catch (e) {
                   appStore.setLoading(false);
                   log(e.toString());
                   if (context != null && context.mounted) toast(e.toString());
-                });
+                }
               }
             } catch (e) {
               appStore.setLoading(false);
               log('Navigation error: ${e.toString()}');
               if (context != null && context.mounted) toast(e.toString());
             }
-          }).catchError((e) {
+          } catch (e) {
             appStore.setLoading(false);
             log(e.toString());
             if (context != null && context.mounted) toast(e.toString());
-          });
+          }
         } else {
           appStore.setLoading(false);
           if (context != null && context.mounted) toast('User creation failed');
         }
-      }).catchError((e) {
+      } catch (e) {
         appStore.setLoading(false);
         log(e.toString());
-        if (context != null && context.mounted) toast(e.toString());
-      });
-    } /* on FirebaseException catch (error) {
-      appStore.setLoading(false);
-      if (context != null && context.mounted)
-        toast(getMessageFromErrorCode(error));
-    } */
-    catch (e) {
+
+        // Handle specific Firebase errors with user-friendly messages
+        if (e is FirebaseException) {
+          String errorMessage = getMessageFromErrorCode(e);
+          if (context != null && context.mounted) toast(errorMessage);
+        } else {
+          if (context != null && context.mounted) toast(e.toString());
+        }
+      }
+    } catch (e) {
       appStore.setLoading(false);
       log('Unexpected error: ${e.toString()}');
       if (context != null && context.mounted) toast(e.toString());
@@ -185,9 +190,9 @@ class AuthServices {
 
   Future<void> signInWithEmailPassword(context,
       {required String email, required String password}) async {
-    await _auth
-        .signInWithEmailAndPassword(email: email, password: password)
-        .then((value) async {
+    try {
+      final value = await _auth.signInWithEmailAndPassword(
+          email: email, password: password);
       appStore.setLoading(true);
       final User user = value.user!;
       UserData userModel = await userService.getUser(email: user.email);
@@ -202,12 +207,15 @@ class AuthServices {
       //Login Details to AppStore
       appStore.setUserEmail(userModel.email.validate());
       appStore.setUId(userModel.uid.validate());
-
-      //
-    }).catchError((e) {
-      toast(e.toString());
+    } catch (e) {
+      if (e is FirebaseException) {
+        String errorMessage = getMessageFromErrorCode(e);
+        toast(errorMessage);
+      } else {
+        toast(e.toString());
+      }
       log(e.toString());
-    });
+    }
   }
 
   /*  Future<void> loginFromFirebaseUser(User currentUser,

@@ -8,6 +8,7 @@ import 'package:taxi_driver/screens/RidesListScreen.dart';
 import 'package:taxi_driver/utils/Colors.dart';
 import 'package:taxi_driver/utils/Common.dart';
 import 'package:taxi_driver/utils/Extensions/app_common.dart';
+import 'package:taxi_driver/utils/NewDriverDataCleaner.dart';
 import 'package:taxi_driver/main.dart';
 import 'package:taxi_driver/network/RestApis.dart';
 import 'package:taxi_driver/model/UserDetailModel.dart';
@@ -47,16 +48,22 @@ class _AllOfDetailsState extends State<AllOfDetails> {
       userDetail = await getUserDetail(userId: userId);
 
       // Get total completed rides count for this driver
-      final completedRides = await getRiderRequestList(
-        page: 1,
-        status: COMPLETED,
-        driverId: userId,
-      );
-      if (completedRides.data != null) {
-        totalCompletedRides = completedRides.data!
-            .where(
-                (ride) => ride.driverId == userId && ride.status == COMPLETED)
-            .length;
+      // For new drivers, start with 0 rides to ensure clean start
+      if (NewDriverDataCleaner.isNewDriverRegistration()) {
+        totalCompletedRides = 0;
+        log('🆕 New driver detected - starting with 0 completed rides');
+      } else {
+        final completedRides = await getRiderRequestList(
+          page: 1,
+          status: COMPLETED,
+          driverId: userId,
+        );
+        if (completedRides.data != null) {
+          totalCompletedRides = completedRides.data!
+              .where(
+                  (ride) => ride.driverId == userId && ride.status == COMPLETED)
+              .length;
+        }
       }
 
       // Get total earnings

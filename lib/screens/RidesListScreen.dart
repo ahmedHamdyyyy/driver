@@ -14,6 +14,7 @@ import 'package:taxi_driver/utils/Common.dart';
 import 'package:taxi_driver/utils/Constants.dart';
 import 'package:taxi_driver/utils/Extensions/app_common.dart';
 import 'package:taxi_driver/utils/Extensions/dataTypeExtensions.dart';
+import 'package:taxi_driver/utils/NewDriverDataCleaner.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'dart:async';
 import 'package:taxi_driver/Services/DriverZegoService.dart';
@@ -281,10 +282,15 @@ class RidesListScreenState extends State<RidesListScreen>
               .sort((a, b) => (b.createdAt ?? '').compareTo(a.createdAt ?? ''));
         }
 
+        // Filter data for new drivers to ensure clean start
+        final filteredData =
+            NewDriverDataCleaner.filterRidesForNewDriver<RiderModel>(
+                newData, sharedPref.getInt(USER_ID) ?? 0);
+
         if (currentPage == 1) {
-          tabData[currentStatus] = newData;
+          tabData[currentStatus] = filteredData;
         } else {
-          tabData[currentStatus]?.addAll(newData);
+          tabData[currentStatus]?.addAll(filteredData);
         }
 
         // تحديث عداد الطلبات الجديدة

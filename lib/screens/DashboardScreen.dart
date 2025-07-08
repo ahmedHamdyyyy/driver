@@ -28,6 +28,7 @@ import 'package:taxi_driver/screens/DetailScreen.dart';
 import 'package:taxi_driver/screens/ReviewScreen.dart';
 import 'package:taxi_driver/utils/Extensions/context_extensions.dart';
 import 'package:taxi_driver/utils/Extensions/dataTypeExtensions.dart';
+import 'package:taxi_driver/utils/NewDriverDataCleaner.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../Services/RideService.dart';
@@ -420,6 +421,12 @@ class DashboardScreenState extends State<DashboardScreen> {
   }
 
   void init() async {
+    // Check if this is a new driver and ensure clean start
+    if (NewDriverDataCleaner.isNewDriverRegistration()) {
+      log('🆕 New driver detected in Dashboard - ensuring clean state');
+      await NewDriverDataCleaner.verifyCleanStart();
+    }
+
     if (sharedPref.getDouble(LATITUDE) != null &&
         sharedPref.getDouble(LONGITUDE) != null) {
       driverLocation = LatLng(
@@ -1112,6 +1119,19 @@ class DashboardScreenState extends State<DashboardScreen> {
         await rideService.updateStatusOfRide(
             rideID: servicesListData!.id, req: {'on_rider_stream_api_call': 0});
       } catch (e) {}
+
+      // Mark driver as experienced after completing first ride
+      if (NewDriverDataCleaner.isNewDriverRegistration()) {
+        await NewDriverDataCleaner.markDriverAsExperienced();
+        // Update total completed rides count
+        await sharedPref.setInt('total_completed_rides', 1);
+        log('🎉 First ride completed! Driver marked as experienced.');
+      } else {
+        // Increment ride count for experienced drivers
+        final currentCount = sharedPref.getInt('total_completed_rides') ?? 0;
+        await sharedPref.setInt('total_completed_rides', currentCount + 1);
+      }
+
       sourceIcon = await BitmapDescriptor.fromAssetImage(
           ImageConfiguration(devicePixelRatio: 2.5),
           Platform.isIOS ? SourceIOSIcon : SourceIcon);
@@ -2435,6 +2455,8 @@ class DashboardScreenState extends State<DashboardScreen> {
             ),
           ),
         ),
+        // Notification icon commented out and hidden
+        /*
         inkWellWidget(
           onTap: () {
             /*  launchScreen(
@@ -2455,6 +2477,7 @@ class DashboardScreenState extends State<DashboardScreen> {
             child: Icon(Ionicons.notifications_outline),
           ),
         ),
+        */
       ],
     );
   }

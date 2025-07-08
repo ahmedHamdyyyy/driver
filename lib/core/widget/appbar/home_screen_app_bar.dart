@@ -9,7 +9,6 @@ import 'package:taxi_driver/core/constant/app_image.dart';
 import 'package:taxi_driver/main.dart';
 import 'package:taxi_driver/network/RestApis.dart';
 import 'package:taxi_driver/utils/Constants.dart';
-
 import '../../../screens/NotificationScreen.dart';
 import '../../../utils/Colors.dart' as AppColors show primaryColor;
 import '../../../utils/Extensions/app_common.dart';

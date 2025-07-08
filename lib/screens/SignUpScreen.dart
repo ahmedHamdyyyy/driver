@@ -9,6 +9,7 @@ import 'package:taxi_driver/screens/DocumentsScreen.dart';
 import 'package:taxi_driver/screens/auth/presentation/widgets/auth_content/auth_appbar.dart';
 import 'package:taxi_driver/utils/Extensions/context_extensions.dart';
 import 'package:taxi_driver/utils/Extensions/dataTypeExtensions.dart';
+import 'package:taxi_driver/utils/NewDriverDataCleaner.dart';
 
 import '../languageConfiguration/LanguageDefaultJson.dart';
 import '../model/ServiceModel.dart';
@@ -131,6 +132,9 @@ class SignUpScreenState extends State<SignUpScreen> {
           final signUpResponse = await signUpApi(req);
 
           if (signUpResponse != null) {
+            // Clear any existing data to ensure clean start for new driver
+            await NewDriverDataCleaner.clearAllDataForNewDriver();
+
             // Store user information in SharedPreferences
             await sharedPref.setString(
                 TOKEN, signUpResponse.data!.apiToken.validate());
@@ -166,12 +170,19 @@ class SignUpScreenState extends State<SignUpScreen> {
             await sharedPref.setInt(
                 IS_Verified_Driver, signUpResponse.data!.isVerifiedDriver ?? 0);
 
+            // Mark as new driver registration
+            await sharedPref.setBool('is_first_driver_login', true);
+            await sharedPref.setInt('total_completed_rides', 0);
+
             await appStore.setLoggedIn(true);
             await appStore.setUserEmail(signUpResponse.data!.email.validate());
             if (signUpResponse.data!.profileImage != null) {
               await appStore
                   .setUserProfile(signUpResponse.data!.profileImage.validate());
             }
+
+            // Verify clean start
+            await NewDriverDataCleaner.verifyCleanStart();
 
             appStore.setLoading(false);
             toast('تم التسجيل بنجاح');

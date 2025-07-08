@@ -876,27 +876,33 @@ String getMessageFromErrorCode(FirebaseException error) {
     case "ERROR_EMAIL_ALREADY_IN_USE":
     case "account-exists-with-different-credential":
     case "email-already-in-use":
-      return "The email address is already in use by another account.";
+      return "هذا البريد الإلكتروني مستخدم بالفعل. يرجى استخدام بريد إلكتروني آخر أو تسجيل الدخول.";
     case "ERROR_WRONG_PASSWORD":
     case "wrong-password":
-      return "Wrong email/password combination.";
+      return "كلمة المرور غير صحيحة. يرجى المحاولة مرة أخرى.";
     case "ERROR_USER_NOT_FOUND":
     case "user-not-found":
-      return "No user found with this email.";
+      return "لا يوجد حساب مسجل بهذا البريد الإلكتروني.";
     case "ERROR_USER_DISABLED":
     case "user-disabled":
-      return "User disabled.";
+      return "تم تعطيل هذا الحساب. يرجى التواصل مع الدعم الفني.";
     case "ERROR_TOO_MANY_REQUESTS":
+    case "too-many-requests":
+      return "تم تجاوز عدد المحاولات المسموح. يرجى المحاولة لاحقاً.";
     case "operation-not-allowed":
-      return "Too many requests to log into this account.";
-    // case "ERROR_OPERATION_NOT_ALLOWED":
-    case "operation-not-allowed":
-      return "Server error, please try again later.";
+      return "حدث خطأ في الخادم. يرجى المحاولة لاحقاً.";
     case "ERROR_INVALID_EMAIL":
     case "invalid-email":
-      return "Email address is invalid.";
+      return "البريد الإلكتروني غير صحيح. يرجى التأكد من صحة البريد الإلكتروني.";
+    case "weak-password":
+      return "كلمة المرور ضعيفة. يرجى استخدام كلمة مرور أقوى.";
+    case "requires-recent-login":
+      return "يرجى تسجيل الدخول مرة أخرى لإتمام هذه العملية.";
+    case "network-request-failed":
+      return "فشل في الاتصال بالشبكة. يرجى التأكد من اتصالك بالإنترنت.";
     default:
-      return error.message.toString();
+      return error.message?.toString() ??
+          "حدث خطأ غير متوقع. يرجى المحاولة مرة أخرى.";
   }
 }
 
