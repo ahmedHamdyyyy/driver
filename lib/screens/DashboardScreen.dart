@@ -28,11 +28,13 @@ import 'package:taxi_driver/screens/DetailScreen.dart';
 import 'package:taxi_driver/screens/ReviewScreen.dart';
 import 'package:taxi_driver/utils/Extensions/context_extensions.dart';
 import 'package:taxi_driver/utils/Extensions/dataTypeExtensions.dart';
+import 'package:taxi_driver/utils/NewDriverDataCleaner.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../Services/RideService.dart';
 import '../Services/VersionServices.dart';
 import '../Services/DriverZegoService.dart';
+import '../components/ModernCallDialog.dart';
 import '../components/AlertScreen.dart';
 import '../components/CancelOrderDialog.dart';
 import '../components/DrawerComponent.dart';
@@ -68,6 +70,9 @@ class DashboardScreenState extends State<DashboardScreen> {
   StreamController _messageController = StreamController.broadcast();
 
   late StreamSubscription _messageSubscription;
+
+  // Modern call state management
+  bool _isCallingInProgress = false;
 
   final GlobalKey<ScaffoldState> scaffoldKey = GlobalKey<ScaffoldState>();
   RideService rideService = RideService();
@@ -135,6 +140,188 @@ class DashboardScreenState extends State<DashboardScreen> {
 
   var bidNoteController = TextEditingController();
   var bidAmountController = TextEditingController();
+
+  // Show phone call confirmation dialog
+  void _showCallOptionsDialog() {
+    showDialog(
+      context: context,
+      builder: (BuildContext context) {
+        return AlertDialog(
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(16),
+          ),
+          title: Row(
+            children: [
+              Icon(Icons.phone, color: primaryColor),
+              SizedBox(width: 12),
+              Text(
+                "إجراء مكالمة",
+                style: boldTextStyle(size: 18),
+              ),
+            ],
+          ),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(
+                "هل تريد الاتصال بـ ${riderData?.firstName ?? 'الراكب'}؟",
+                style: secondaryTextStyle(size: 14),
+                textAlign: TextAlign.center,
+              ),
+              SizedBox(height: 20),
+              SizedBox(
+                width: double.infinity,
+                child: ElevatedButton.icon(
+                  onPressed: () {
+                    Navigator.of(context).pop();
+                    _callRiderFromDashboard(false); // Voice call only
+                  },
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.green,
+                    padding: EdgeInsets.symmetric(vertical: 14),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                  ),
+                  icon: Icon(Icons.phone, color: Colors.white),
+                  label: Text(
+                    "اتصال صوتي",
+                    style: boldTextStyle(color: Colors.white, size: 16),
+                  ),
+                ),
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(),
+              child: Text(
+                "إلغاء",
+                style: secondaryTextStyle(size: 14),
+              ),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  // Modern Zego call functionality for dashboard
+  Future<void> _callRiderFromDashboard(bool isVideoCall) async {
+    // Prevent multiple simultaneous calls
+    if (_isCallingInProgress) {
+      toast("مكالمة قيد التقدم بالفعل...");
+      return;
+    }
+
+    if (servicesListData?.riderContactNumber == null ||
+        servicesListData!.riderContactNumber!.isEmpty) {
+      toast("رقم هاتف الراكب غير متوفر");
+      return;
+    }
+
+    setState(() {
+      _isCallingInProgress = true;
+    });
+
+    try {
+      // Ensure Zego service is active
+      if (!DriverZegoService.isLoggedIn) {
+        toast("جاري تجهيز خدمة المكالمات...");
+        bool loginResult = await DriverZegoService.autoLoginDriver();
+
+        if (!loginResult) {
+          toast("فشل في تفعيل خدمة المكالمات");
+          return;
+        }
+      }
+
+      // Show modern professional call dialog
+      showDialog(
+        context: context,
+        barrierDismissible: false,
+        builder: (context) => ModernCallDialog(
+          riderName: riderData?.firstName ?? "راكب",
+          riderPhone: servicesListData!.riderContactNumber!,
+          isVideoCall: isVideoCall,
+          onCancel: () {
+            Navigator.of(context).pop();
+            setState(() {
+              _isCallingInProgress = false;
+            });
+            toast("تم إلغاء المكالمة");
+          },
+        ),
+      );
+
+      // Add slight delay for better UX
+      await Future.delayed(Duration(milliseconds: 1500));
+
+      // Call the rider
+      bool callResult = await DriverZegoService.callRider(
+        riderPhoneNumber: servicesListData!.riderContactNumber!,
+        context: context,
+        riderName: riderData?.firstName,
+        isVideoCall: isVideoCall,
+      );
+
+      // Close modern loading dialog
+      Navigator.pop(context);
+
+      if (callResult) {
+        // Show modern success dialog
+        showDialog(
+          context: context,
+          barrierDismissible: true,
+          builder: (context) => CallSuccessDialog(
+            riderName: riderData?.firstName ?? "راكب",
+            isVideoCall: isVideoCall,
+            onClose: () => Navigator.of(context).pop(),
+          ),
+        );
+      } else {
+        // Show modern error dialog with retry option
+        showDialog(
+          context: context,
+          barrierDismissible: true,
+          builder: (context) => CallErrorDialog(
+            errorMessage: "فشل في إرسال طلب الاتصال. يرجى المحاولة مرة أخرى.",
+            onRetry: () {
+              Navigator.of(context).pop();
+              _callRiderFromDashboard(isVideoCall);
+            },
+            onClose: () => Navigator.of(context).pop(),
+          ),
+        );
+      }
+    } catch (e) {
+      // Close loading dialog if open
+      if (Navigator.canPop(context)) {
+        Navigator.pop(context);
+      }
+
+      // Show modern error dialog
+      showDialog(
+        context: context,
+        barrierDismissible: true,
+        builder: (context) => CallErrorDialog(
+          errorMessage: "حدث خطأ أثناء الاتصال: ${e.toString()}",
+          onRetry: () {
+            Navigator.of(context).pop();
+            _callRiderFromDashboard(isVideoCall);
+          },
+          onClose: () => Navigator.of(context).pop(),
+        ),
+      );
+
+      print("🔴 Dashboard call error: $e");
+    } finally {
+      // Reset call state
+      setState(() {
+        _isCallingInProgress = false;
+      });
+    }
+  }
 
   Future<BitmapDescriptor> getNetworkImageMarker(String? imageUrl) async {
     if (imageUrl == null || imageUrl.isEmpty) {
@@ -234,6 +421,12 @@ class DashboardScreenState extends State<DashboardScreen> {
   }
 
   void init() async {
+    // Check if this is a new driver and ensure clean start
+    if (NewDriverDataCleaner.isNewDriverRegistration()) {
+      log('🆕 New driver detected in Dashboard - ensuring clean state');
+      await NewDriverDataCleaner.verifyCleanStart();
+    }
+
     if (sharedPref.getDouble(LATITUDE) != null &&
         sharedPref.getDouble(LONGITUDE) != null) {
       driverLocation = LatLng(
@@ -926,6 +1119,19 @@ class DashboardScreenState extends State<DashboardScreen> {
         await rideService.updateStatusOfRide(
             rideID: servicesListData!.id, req: {'on_rider_stream_api_call': 0});
       } catch (e) {}
+
+      // Mark driver as experienced after completing first ride
+      if (NewDriverDataCleaner.isNewDriverRegistration()) {
+        await NewDriverDataCleaner.markDriverAsExperienced();
+        // Update total completed rides count
+        await sharedPref.setInt('total_completed_rides', 1);
+        log('🎉 First ride completed! Driver marked as experienced.');
+      } else {
+        // Increment ride count for experienced drivers
+        final currentCount = sharedPref.getInt('total_completed_rides') ?? 0;
+        await sharedPref.setInt('total_completed_rides', currentCount + 1);
+      }
+
       sourceIcon = await BitmapDescriptor.fromAssetImage(
           ImageConfiguration(devicePixelRatio: 2.5),
           Platform.isIOS ? SourceIOSIcon : SourceIcon);
@@ -1843,15 +2049,48 @@ class DashboardScreenState extends State<DashboardScreen> {
                                                 ),
                                                 SizedBox(width: 8),
                                                 inkWellWidget(
-                                                  onTap: () {
-                                                    launchUrl(
-                                                        Uri.parse(
-                                                            'tel:${servicesListData!.riderContactNumber}'),
-                                                        mode: LaunchMode
-                                                            .externalApplication);
-                                                  },
-                                                  child: chatCallWidget(
-                                                      Icons.call),
+                                                  onTap: _isCallingInProgress
+                                                      ? null
+                                                      : () {
+                                                          // Show modern call options
+                                                          _showCallOptionsDialog();
+                                                        },
+                                                  child: Container(
+                                                    decoration: BoxDecoration(
+                                                      color:
+                                                          _isCallingInProgress
+                                                              ? Colors.grey
+                                                                  .withOpacity(
+                                                                      0.3)
+                                                              : Colors.green
+                                                                  .withOpacity(
+                                                                      0.2),
+                                                      borderRadius:
+                                                          BorderRadius.circular(
+                                                              8),
+                                                    ),
+                                                    child: _isCallingInProgress
+                                                        ? Padding(
+                                                            padding:
+                                                                EdgeInsets.all(
+                                                                    8),
+                                                            child: SizedBox(
+                                                              width: 16,
+                                                              height: 16,
+                                                              child:
+                                                                  CircularProgressIndicator(
+                                                                strokeWidth: 2,
+                                                                valueColor:
+                                                                    AlwaysStoppedAnimation<
+                                                                            Color>(
+                                                                        Colors
+                                                                            .grey),
+                                                              ),
+                                                            ),
+                                                          )
+                                                        : chatCallWidget(
+                                                            Icons.call),
+                                                  ),
                                                 ),
                                                 SizedBox(width: 8),
                                                 inkWellWidget(
@@ -2216,6 +2455,8 @@ class DashboardScreenState extends State<DashboardScreen> {
             ),
           ),
         ),
+        // Notification icon commented out and hidden
+        /*
         inkWellWidget(
           onTap: () {
             /*  launchScreen(
@@ -2236,6 +2477,7 @@ class DashboardScreenState extends State<DashboardScreen> {
             child: Icon(Ionicons.notifications_outline),
           ),
         ),
+        */
       ],
     );
   }
@@ -3301,7 +3543,7 @@ class DashboardScreenState extends State<DashboardScreen> {
                                                                                 secondaryTextStyle()),
                                                                         printAmountWidget(
                                                                             amount:
-                                                                                platformFee.toStringAsFixed(2).toString(),
+                                                                                platformFee.toStringAsFixed(digitAfterDecimal).toString(),
                                                                             size: 14,
                                                                             textStyle: boldTextStyle(size: 14))
                                                                       ],
@@ -3313,7 +3555,7 @@ class DashboardScreenState extends State<DashboardScreen> {
                                                                             style:
                                                                                 secondaryTextStyle()),
                                                                         printAmountWidget(
-                                                                            amount: "${youWillGet.toStringAsFixed(2)}"
+                                                                            amount: "${youWillGet.toStringAsFixed(digitAfterDecimal)}"
                                                                                 .toString(),
                                                                             size:
                                                                                 14,

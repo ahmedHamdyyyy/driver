@@ -16,7 +16,9 @@ import 'package:taxi_driver/model/UserDetailModel.dart';
 import 'package:taxi_driver/model/ServiceModel.dart';
 import 'package:taxi_driver/utils/Extensions/dataTypeExtensions.dart';
 import 'package:taxi_driver/utils/Extensions/app_common.dart';
+import 'package:taxi_driver/utils/NewDriverDataCleaner.dart';
 import 'TermsConditionScreen.dart';
+import 'settings/settings_screen/presentation/pages/privacy_screen.dart';
 
 import '../components/OTPDialog.dart';
 import '../model/UserDetailModel.dart';
@@ -389,18 +391,10 @@ class SignInScreenState extends State<SignInScreen>
                         style: boldTextStyle(color: primaryColor, size: 14),
                         recognizer: TapGestureRecognizer()
                           ..onTap = () {
-                            if (privacyPolicy != null &&
-                                privacyPolicy!.isNotEmpty) {
-                              launchScreen(
-                                context,
-                                TermsConditionScreen(
-                                  title: language.privacyPolicy,
-                                  subtitle: privacyPolicy,
-                                ),
-                              );
-                            } else {
-                              toast(language.txtURLEmpty);
-                            }
+                            launchScreen(
+                              context,
+                              PrivacyScreen(),
+                            );
                           },
                       ),
                     ],
@@ -759,18 +753,10 @@ class SignInScreenState extends State<SignInScreen>
                         style: boldTextStyle(color: primaryColor, size: 14),
                         recognizer: TapGestureRecognizer()
                           ..onTap = () {
-                            if (privacyPolicy != null &&
-                                privacyPolicy!.isNotEmpty) {
-                              launchScreen(
-                                context,
-                                TermsConditionScreen(
-                                  title: language.privacyPolicy,
-                                  subtitle: privacyPolicy,
-                                ),
-                              );
-                            } else {
-                              toast(language.txtURLEmpty);
-                            }
+                            launchScreen(
+                              context,
+                              PrivacyScreen(),
+                            );
                           },
                       ),
                     ],
@@ -836,6 +822,9 @@ class SignInScreenState extends State<SignInScreen>
           final response = await signUpApi(req);
 
           if (response.data != null) {
+            // Clear any existing data to ensure clean start for new driver
+            await NewDriverDataCleaner.clearAllDataForNewDriver();
+
             // Store user information in SharedPreferences
             await sharedPref.setString(
                 TOKEN, response.data!.apiToken.validate());
@@ -862,8 +851,15 @@ class SignInScreenState extends State<SignInScreen>
             // Set verification status to 0 (unverified)
             await sharedPref.setInt(IS_Verified_Driver, 0);
 
+            // Mark as new driver registration
+            await sharedPref.setBool('is_first_driver_login', true);
+            await sharedPref.setInt('total_completed_rides', 0);
+
             // Set logged in state
             await appStore.setLoggedIn(true);
+
+            // Verify clean start
+            await NewDriverDataCleaner.verifyCleanStart();
 
             appStore.setLoading(false);
             toast('تم التسجيل بنجاح');

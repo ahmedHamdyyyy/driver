@@ -36,6 +36,8 @@ import '../utils/Images.dart';
 import 'DashboardScreen.dart';
 import 'MainScreen.dart';
 import 'VehicleScreen.dart';
+import '../model/ServiceModel.dart';
+import '../model/UserDetailModel.dart';
 
 class DocumentsScreen extends StatefulWidget {
   final bool isShow;
@@ -52,6 +54,9 @@ class DocumentsScreenState extends State<DocumentsScreen>
 
   List<DocumentModel> documentList = [];
   List<DriverDocumentModel> driverDocumentList = [];
+  List<ServiceList> serviceList = [];
+  int? selectedServiceId;
+  UserData? userData;
 
   List<int> uploadedDocList = [];
   List<String> eAttachments = [];
@@ -132,10 +137,139 @@ class DocumentsScreenState extends State<DocumentsScreen>
     isExpire = 0;
 
     init();
+
+    // NEW: Add lifecycle listener to detect when screen becomes visible again
+    // Use multiple frame delays to ensure proper widget initialization
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      Future.delayed(Duration(milliseconds: 200), () {
+        if (mounted) {
+          _restoreScreenState();
+        }
+      });
+    });
+  }
+
+  // NEW: Method to preserve screen state
+  void _preserveScreenState() {
+    // Store current state in shared preferences or local storage
+    Map<String, dynamic> screenState = {
+      'currentPage': _currentPage,
+      'frontIdImagePath': frontIdImage?.path,
+      'backIdImagePath': backIdImage?.path,
+      'frontLicenseImagePath': frontLicenseImage?.path,
+      'backLicenseImagePath': backLicenseImage?.path,
+      'carFrontLicenseImagePath': carFrontLicenseImage?.path,
+      'carBackLicenseImagePath': carBackLicenseImage?.path,
+      'carImagePath': carImage?.path,
+      'driverLicenseNumber': driverLicenseNumberController.text,
+      'driverLicenseExpiry': driverLicenseExpiryController.text,
+      'carType': carTypeController.text,
+      'carPlateNumber': carPlateNumberController.text,
+      'carLicenseExpiry': carLicenseExpiryController.text,
+      'carColor': carColorController.text,
+      'driverLicenseExpiryDate': driverLicenseExpiryDate?.toIso8601String(),
+      'carLicenseExpiryDate': carLicenseExpiryDate?.toIso8601String(),
+    };
+
+    // Store in SharedPreferences
+    sharedPref.setString('documents_screen_state', jsonEncode(screenState));
+  }
+
+  // NEW: Method to restore screen state
+  void _restoreScreenState() {
+    String? stateJson = sharedPref.getString('documents_screen_state');
+    if (stateJson != null && stateJson.isNotEmpty) {
+      try {
+        Map<String, dynamic> screenState = jsonDecode(stateJson);
+
+        setState(() {
+          _currentPage = screenState['currentPage'] ?? 0;
+
+          // Restore image files
+          if (screenState['frontIdImagePath'] != null) {
+            frontIdImage = File(screenState['frontIdImagePath']);
+          }
+          if (screenState['backIdImagePath'] != null) {
+            backIdImage = File(screenState['backIdImagePath']);
+          }
+          if (screenState['frontLicenseImagePath'] != null) {
+            frontLicenseImage = File(screenState['frontLicenseImagePath']);
+          }
+          if (screenState['backLicenseImagePath'] != null) {
+            backLicenseImage = File(screenState['backLicenseImagePath']);
+          }
+          if (screenState['carFrontLicenseImagePath'] != null) {
+            carFrontLicenseImage =
+                File(screenState['carFrontLicenseImagePath']);
+          }
+          if (screenState['carBackLicenseImagePath'] != null) {
+            carBackLicenseImage = File(screenState['carBackLicenseImagePath']);
+          }
+          if (screenState['carImagePath'] != null) {
+            carImage = File(screenState['carImagePath']);
+          }
+
+          // Restore text fields
+          driverLicenseNumberController.text =
+              screenState['driverLicenseNumber'] ?? '';
+          driverLicenseExpiryController.text =
+              screenState['driverLicenseExpiry'] ?? '';
+          carTypeController.text = screenState['carType'] ?? '';
+          carPlateNumberController.text = screenState['carPlateNumber'] ?? '';
+          carLicenseExpiryController.text =
+              screenState['carLicenseExpiry'] ?? '';
+          carColorController.text = screenState['carColor'] ?? '';
+
+          // Restore dates
+          if (screenState['driverLicenseExpiryDate'] != null) {
+            driverLicenseExpiryDate =
+                DateTime.parse(screenState['driverLicenseExpiryDate']);
+          }
+          if (screenState['carLicenseExpiryDate'] != null) {
+            carLicenseExpiryDate =
+                DateTime.parse(screenState['carLicenseExpiryDate']);
+          }
+        });
+
+        // Navigate to the correct page after state restoration
+        // Don't navigate immediately - let the widget build first
+        if (_currentPage > 0) {
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            Future.delayed(Duration(milliseconds: 500), () {
+              if (mounted && _pageController.hasClients) {
+                try {
+                  _pageController.jumpToPage(_currentPage);
+                } catch (e) {
+                  print('Error jumping to page $_currentPage: $e');
+                  // Reset to first page if navigation fails
+                  setState(() {
+                    _currentPage = 0;
+                  });
+                }
+              }
+            });
+          });
+        }
+      } catch (e) {
+        print('Error restoring screen state: $e');
+        // Clear corrupted state
+        sharedPref.remove('documents_screen_state');
+      }
+    }
+  }
+
+  // NEW: Method to clear preserved state
+  void _clearPreservedState() {
+    sharedPref.remove('documents_screen_state');
   }
 
   @override
   void dispose() {
+    // NEW: Preserve state before disposal unless form is completed
+    if (!_isSubmissionCompleted()) {
+      _preserveScreenState();
+    }
+
     _fadeController.dispose();
     _pageController.dispose(); // NEW: Dispose page controller
     driverLicenseNumberController.dispose();
@@ -355,12 +489,40 @@ class DocumentsScreenState extends State<DocumentsScreen>
   void init() async {
     afterBuildCreated(() async {
       appStore.setLoading(true);
+      await fetchData();
       await getDocument();
       await driverDocument();
 
       // Check document status after loading data but don't show dialogs automatically
       checkDocumentStatus();
       appStore.setLoading(false);
+    });
+  }
+
+  Future<void> fetchData() async {
+    await Future.wait([
+      getUserDetail(userId: sharedPref.getInt(USER_ID)),
+      getServices(),
+    ]).then((value) {
+      final userDetailModel = value[0] as UserDetailModel;
+      final serviceModel = value[1] as ServiceModel;
+
+      userData = userDetailModel.data!;
+      serviceList = serviceModel.data!;
+
+      if (userData!.userDetail != null) {
+        carTypeController.text = userData!.userDetail!.carModel ?? '';
+        carColorController.text = userData!.userDetail!.carColor ?? '';
+        carPlateNumberController.text =
+            userData!.userDetail!.carPlateNumber ?? '';
+        carLicenseExpiryController.text =
+            userData!.userDetail!.carProductionYear ?? '';
+      }
+      selectedServiceId = userData!.serviceId;
+
+      setState(() {});
+    }).catchError((e) {
+      log(e.toString());
     });
   }
 
@@ -565,225 +727,382 @@ class DocumentsScreenState extends State<DocumentsScreen>
 
       // Create professional PDF with cover page and proper layout
 
-      // Cover Page
+      // Professional Cover Page
       pdf.addPage(
         pw.Page(
           pageFormat: PdfPageFormat.a4,
-          margin: pw.EdgeInsets.all(40),
+          margin: pw.EdgeInsets.all(0),
           build: (pw.Context context) {
-            return pw.Column(
-              crossAxisAlignment: pw.CrossAxisAlignment.center,
-              children: [
-                pw.Spacer(flex: 2),
+            final currentDate = DateTime.now();
+            final referenceNumber = 'DOC-${currentDate.millisecondsSinceEpoch}';
+            final formattedDate =
+                '${currentDate.year}-${currentDate.month.toString().padLeft(2, '0')}-${currentDate.day.toString().padLeft(2, '0')}';
 
-                // Logo or Icon
-                pw.Container(
-                  padding: pw.EdgeInsets.all(20),
-                  decoration: pw.BoxDecoration(
-                    color: PdfColors.blue50,
-                    shape: pw.BoxShape.circle,
-                  ),
-                  child: pw.Icon(
-                    pw.IconData(0xe158), // car icon
-                    size: 60,
-                    color: PdfColors.blue800,
-                  ),
+            return pw.Container(
+              decoration: pw.BoxDecoration(
+                gradient: pw.LinearGradient(
+                  colors: [PdfColors.blue50, PdfColors.white, PdfColors.grey50],
+                  begin: pw.Alignment.topCenter,
+                  end: pw.Alignment.bottomCenter,
                 ),
+              ),
+              child: pw.Padding(
+                padding: pw.EdgeInsets.all(40),
+                child: pw.Column(
+                  crossAxisAlignment: pw.CrossAxisAlignment.center,
+                  children: [
+                    pw.SizedBox(height: 40),
 
-                pw.SizedBox(height: 30),
-
-                // Main Title
-                pw.Container(
-                  padding: pw.EdgeInsets.all(20),
-                  decoration: pw.BoxDecoration(
-                    color: PdfColors.blue50,
-                    borderRadius: pw.BorderRadius.circular(15),
-                    border: pw.Border.all(color: PdfColors.blue200, width: 2),
-                  ),
-                  child: pw.Column(
-                    children: [
-                      pw.Text(
-                        'driver official documents',
-                        style: pw.TextStyle(
-                          fontSize: 28,
-                          fontWeight: pw.FontWeight.bold,
-                          color: PdfColors.blue800,
-                        ),
-                        textAlign: pw.TextAlign.center,
+                    // Professional Header Badge
+                    pw.Container(
+                      padding:
+                          pw.EdgeInsets.symmetric(horizontal: 30, vertical: 15),
+                      decoration: pw.BoxDecoration(
+                        color: PdfColors.blue800,
+                        borderRadius: pw.BorderRadius.circular(25),
                       ),
-                      pw.SizedBox(height: 10),
-                      pw.Text(
-                        'driver official documents',
+                      child: pw.Text(
+                        'Official Documents',
                         style: pw.TextStyle(
                           fontSize: 16,
-                          fontWeight: pw.FontWeight.normal,
-                          color: PdfColors.blue600,
+                          fontWeight: pw.FontWeight.bold,
+                          color: PdfColors.white,
+                        ),
+                      ),
+                    ),
+
+                    pw.SizedBox(height: 40),
+
+                    // Professional Logo Container
+                    pw.Container(
+                      width: 120,
+                      height: 120,
+                      decoration: pw.BoxDecoration(
+                        color: PdfColors.white,
+                        shape: pw.BoxShape.circle,
+                        border:
+                            pw.Border.all(color: PdfColors.blue800, width: 3),
+                      ),
+                    ),
+
+                    pw.SizedBox(height: 30),
+
+                    // Main Professional Title
+                    pw.Container(
+                      width: double.infinity,
+                      padding: pw.EdgeInsets.all(30),
+                      decoration: pw.BoxDecoration(
+                        color: PdfColors.white,
+                        borderRadius: pw.BorderRadius.circular(20),
+                        border:
+                            pw.Border.all(color: PdfColors.blue100, width: 2),
+                      ),
+                      child: pw.Column(
+                        children: [
+                          pw.Text(
+                            'Driver Official Documents',
+                            style: pw.TextStyle(
+                              fontSize: 32,
+                              fontWeight: pw.FontWeight.bold,
+                              color: PdfColors.blue800,
+                            ),
+                            textAlign: pw.TextAlign.center,
+                          ),
+                          pw.SizedBox(height: 15),
+                          pw.Container(
+                            height: 3,
+                            width: 100,
+                            decoration: pw.BoxDecoration(
+                              color: PdfColors.blue600,
+                              borderRadius: pw.BorderRadius.circular(2),
+                            ),
+                          ),
+                          pw.SizedBox(height: 15),
+                          pw.Text(
+                            'Complete set of official documents and identification',
+                            style: pw.TextStyle(
+                              fontSize: 16,
+                              fontWeight: pw.FontWeight.normal,
+                              color: PdfColors.blue600,
+                            ),
+                            textAlign: pw.TextAlign.center,
+                          ),
+                        ],
+                      ),
+                    ),
+
+                    pw.SizedBox(height: 40),
+
+                    // Professional Document Info Cards
+                    pw.Row(
+                      children: [
+                        pw.Expanded(
+                          child: pw.Container(
+                            padding: pw.EdgeInsets.all(20),
+                            decoration: pw.BoxDecoration(
+                              color: PdfColors.white,
+                              borderRadius: pw.BorderRadius.circular(15),
+                              border: pw.Border.all(
+                                  color: PdfColors.green200, width: 1.5),
+                            ),
+                            child: pw.Column(
+                              children: [
+                                pw.SizedBox(height: 10),
+                                pw.Text(
+                                  'Submission Date',
+                                  style: pw.TextStyle(
+                                    fontSize: 12,
+                                    color: PdfColors.grey600,
+                                    fontWeight: pw.FontWeight.bold,
+                                  ),
+                                ),
+                                pw.SizedBox(height: 5),
+                                pw.Text(
+                                  formattedDate,
+                                  style: pw.TextStyle(
+                                    fontSize: 16,
+                                    color: PdfColors.green800,
+                                    fontWeight: pw.FontWeight.bold,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                        pw.SizedBox(width: 20),
+                        pw.Expanded(
+                          child: pw.Container(
+                            padding: pw.EdgeInsets.all(20),
+                            decoration: pw.BoxDecoration(
+                              color: PdfColors.white,
+                              borderRadius: pw.BorderRadius.circular(15),
+                              border: pw.Border.all(
+                                  color: PdfColors.orange200, width: 1.5),
+                            ),
+                            child: pw.Column(
+                              children: [
+                                pw.SizedBox(height: 10),
+                                pw.Text(
+                                  'Reference Number',
+                                  style: pw.TextStyle(
+                                    fontSize: 12,
+                                    color: PdfColors.grey600,
+                                    fontWeight: pw.FontWeight.bold,
+                                  ),
+                                ),
+                                pw.SizedBox(height: 5),
+                                pw.Text(
+                                  referenceNumber,
+                                  style: pw.TextStyle(
+                                    fontSize: 16,
+                                    color: PdfColors.orange800,
+                                    fontWeight: pw.FontWeight.bold,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+
+                    pw.SizedBox(height: 40),
+
+                    // Status Badge
+                    pw.Container(
+                      padding:
+                          pw.EdgeInsets.symmetric(horizontal: 20, vertical: 10),
+                      decoration: pw.BoxDecoration(
+                        color: PdfColors.yellow50,
+                        borderRadius: pw.BorderRadius.circular(15),
+                        border:
+                            pw.Border.all(color: PdfColors.yellow200, width: 1),
+                      ),
+                      child: pw.Text(
+                        'Under Review & Approval',
+                        style: pw.TextStyle(
+                          fontSize: 14,
+                          color: PdfColors.yellow800,
+                          fontWeight: pw.FontWeight.bold,
+                        ),
+                      ),
+                    ),
+
+                    pw.Spacer(),
+
+                    // Security Notice
+                    pw.Container(
+                      padding: pw.EdgeInsets.all(15),
+                      decoration: pw.BoxDecoration(
+                        color: PdfColors.grey100,
+                        borderRadius: pw.BorderRadius.circular(12),
+                        border: pw.Border.all(color: PdfColors.grey300),
+                      ),
+                      child: pw.Text(
+                        'Protected & Secure - For Official Use Only',
+                        style: pw.TextStyle(
+                          fontSize: 12,
+                          color: PdfColors.grey600,
+                          fontWeight: pw.FontWeight.bold,
                         ),
                         textAlign: pw.TextAlign.center,
                       ),
-                    ],
-                  ),
+                    ),
+                  ],
                 ),
-
-                pw.Spacer(flex: 1),
-
-                // Document Info
-                pw.Container(
-                  padding: pw.EdgeInsets.all(15),
-                  decoration: pw.BoxDecoration(
-                    border: pw.Border.all(color: PdfColors.grey400),
-                    borderRadius: pw.BorderRadius.circular(10),
-                  ),
-                  child: pw.Column(
-                    children: [
-                      pw.Text(
-                        'submission date: ${DateTime.now().toString().split(' ')[0]}',
-                        style: pw.TextStyle(
-                            fontSize: 14, fontWeight: pw.FontWeight.bold),
-                      ),
-                      pw.SizedBox(height: 10),
-                      pw.Text(
-                        'reference: DOC-${DateTime.now().millisecondsSinceEpoch}',
-                        style: pw.TextStyle(
-                            fontSize: 12, fontWeight: pw.FontWeight.bold),
-                      ),
-                    ],
-                  ),
-                ),
-
-                pw.Spacer(flex: 3),
-
-                // Footer
-                pw.Container(
-                  padding: pw.EdgeInsets.all(10),
-                  decoration: pw.BoxDecoration(
-                    color: PdfColors.grey100,
-                    borderRadius: pw.BorderRadius.circular(8),
-                  ),
-                  child: pw.Text(
-                    'restricted - for official use only',
-                    style: pw.TextStyle(fontSize: 10, color: PdfColors.grey700),
-                    textAlign: pw.TextAlign.center,
-                  ),
-                ),
-              ],
+              ),
             );
           },
         ),
       );
 
-      // Driver Information Page
+      // Professional Driver Information Page
       pdf.addPage(
         pw.Page(
           pageFormat: PdfPageFormat.a4,
-          margin: pw.EdgeInsets.all(40),
+          margin: pw.EdgeInsets.all(0),
           build: (pw.Context context) {
-            return pw.Column(
-              crossAxisAlignment: pw.CrossAxisAlignment.start,
-              children: [
-                _buildPdfHeader("driver information", context),
-                pw.SizedBox(height: 20),
-
-                // Driver License Details
-                _buildPdfSection(
-                  "driver license details",
-                  [
-                    _buildPdfInfoRow("driver license number",
-                        driverLicenseNumberController.text),
-                    _buildPdfInfoRow("driver license expiry",
-                        driverLicenseExpiryController.text),
-                  ],
+            return pw.Container(
+              decoration: pw.BoxDecoration(
+                gradient: pw.LinearGradient(
+                  colors: [PdfColors.blue50, PdfColors.white, PdfColors.grey50],
+                  begin: pw.Alignment.topCenter,
+                  end: pw.Alignment.bottomCenter,
                 ),
-                pw.SizedBox(height: 20),
-
-                // Vehicle Information
-                _buildPdfSection(
-                  "car information",
-                  [
-                    _buildPdfInfoRow("car type", carTypeController.text),
-                    _buildPdfInfoRow("car color", carColorController.text),
-                    _buildPdfInfoRow(
-                        "car plate number", carPlateNumberController.text),
-                    _buildPdfInfoRow(
-                        "car license expiry", carLicenseExpiryController.text),
-                  ],
-                ),
-
-                pw.Spacer(),
-                _buildPdfFooter(context),
-              ],
-            );
-          },
-        ),
-      );
-
-      // ID Documents Page
-      pdf.addPage(
-        pw.Page(
-          pageFormat: PdfPageFormat.a4,
-          margin: pw.EdgeInsets.all(40),
-          build: (pw.Context context) {
-            return pw.Column(
-              crossAxisAlignment: pw.CrossAxisAlignment.start,
-              children: [
-                _buildPdfHeader("national documents", context),
-                pw.SizedBox(height: 20),
-                pw.Row(
+              ),
+              child: pw.Padding(
+                padding: pw.EdgeInsets.all(40),
+                child: pw.Column(
+                  crossAxisAlignment: pw.CrossAxisAlignment.start,
                   children: [
-                    pw.Expanded(
-                      child: _buildPdfImageContainer(
-                        "front id",
-                        frontIdBytes,
-                      ),
+                    _buildPdfHeader("driver information", context),
+                    pw.SizedBox(height: 30),
+
+                    // Driver License Details
+                    _buildPdfSection(
+                      "driver license details",
+                      [
+                        _buildPdfInfoRow("driver license number",
+                            driverLicenseNumberController.text),
+                        _buildPdfInfoRow("driver license expiry",
+                            driverLicenseExpiryController.text),
+                      ],
                     ),
-                    pw.SizedBox(width: 20),
-                    pw.Expanded(
-                      child: _buildPdfImageContainer(
-                        "back id",
-                        backIdBytes,
-                      ),
+
+                    // Vehicle Information
+                    _buildPdfSection(
+                      "car information",
+                      [
+                        _buildPdfInfoRow("car type", carTypeController.text),
+                        _buildPdfInfoRow("car color", carColorController.text),
+                        _buildPdfInfoRow(
+                            "car plate number", carPlateNumberController.text),
+                        _buildPdfInfoRow("car license expiry",
+                            carLicenseExpiryController.text),
+                      ],
                     ),
+
+                    pw.Spacer(),
+                    _buildPdfFooter(context),
                   ],
                 ),
-                pw.Spacer(),
-                _buildPdfFooter(context),
-              ],
+              ),
             );
           },
         ),
       );
 
-      // Driver License Documents Page
+      // Professional ID Documents Page
       pdf.addPage(
         pw.Page(
           pageFormat: PdfPageFormat.a4,
-          margin: pw.EdgeInsets.all(40),
+          margin: pw.EdgeInsets.all(0),
           build: (pw.Context context) {
-            return pw.Column(
-              crossAxisAlignment: pw.CrossAxisAlignment.start,
-              children: [
-                _buildPdfHeader("driver license", context),
-                pw.SizedBox(height: 20),
-                pw.Row(
+            return pw.Container(
+              decoration: pw.BoxDecoration(
+                gradient: pw.LinearGradient(
+                  colors: [PdfColors.blue50, PdfColors.white, PdfColors.grey50],
+                  begin: pw.Alignment.topCenter,
+                  end: pw.Alignment.bottomCenter,
+                ),
+              ),
+              child: pw.Padding(
+                padding: pw.EdgeInsets.all(40),
+                child: pw.Column(
+                  crossAxisAlignment: pw.CrossAxisAlignment.start,
                   children: [
-                    pw.Expanded(
-                      child: _buildPdfImageContainer(
-                        "front license",
-                        frontLicenseBytes,
-                      ),
+                    _buildPdfHeader("national documents", context),
+                    pw.SizedBox(height: 30),
+                    pw.Row(
+                      children: [
+                        pw.Expanded(
+                          child: _buildPdfImageContainer(
+                            "front id",
+                            frontIdBytes,
+                          ),
+                        ),
+                        pw.SizedBox(width: 20),
+                        pw.Expanded(
+                          child: _buildPdfImageContainer(
+                            "back id",
+                            backIdBytes,
+                          ),
+                        ),
+                      ],
                     ),
-                    pw.SizedBox(width: 20),
-                    pw.Expanded(
-                      child: _buildPdfImageContainer(
-                        "back license",
-                        backLicenseBytes,
-                      ),
-                    ),
+                    pw.Spacer(),
+                    _buildPdfFooter(context),
                   ],
                 ),
-                pw.Spacer(),
-                _buildPdfFooter(context),
-              ],
+              ),
+            );
+          },
+        ),
+      );
+
+      // Professional Driver License Documents Page
+      pdf.addPage(
+        pw.Page(
+          pageFormat: PdfPageFormat.a4,
+          margin: pw.EdgeInsets.all(0),
+          build: (pw.Context context) {
+            return pw.Container(
+              decoration: pw.BoxDecoration(
+                gradient: pw.LinearGradient(
+                  colors: [PdfColors.blue50, PdfColors.white, PdfColors.grey50],
+                  begin: pw.Alignment.topCenter,
+                  end: pw.Alignment.bottomCenter,
+                ),
+              ),
+              child: pw.Padding(
+                padding: pw.EdgeInsets.all(40),
+                child: pw.Column(
+                  crossAxisAlignment: pw.CrossAxisAlignment.start,
+                  children: [
+                    _buildPdfHeader("driver license", context),
+                    pw.SizedBox(height: 30),
+                    pw.Row(
+                      children: [
+                        pw.Expanded(
+                          child: _buildPdfImageContainer(
+                            "front license",
+                            frontLicenseBytes,
+                          ),
+                        ),
+                        pw.SizedBox(width: 20),
+                        pw.Expanded(
+                          child: _buildPdfImageContainer(
+                            "back license",
+                            backLicenseBytes,
+                          ),
+                        ),
+                      ],
+                    ),
+                    pw.Spacer(),
+                    _buildPdfFooter(context),
+                  ],
+                ),
+              ),
             );
           },
         ),
@@ -858,29 +1177,59 @@ class DocumentsScreenState extends State<DocumentsScreen>
     }
   }
 
-  // Helper method to build PDF header
+  // Professional PDF header
   pw.Widget _buildPdfHeader(String title, pw.Context context) {
     return pw.Container(
-      padding: pw.EdgeInsets.only(bottom: 10),
+      padding: pw.EdgeInsets.all(20),
       decoration: pw.BoxDecoration(
-        border: pw.Border(bottom: pw.BorderSide(color: PdfColors.blue200)),
+        gradient: pw.LinearGradient(
+          colors: [PdfColors.blue800, PdfColors.blue600],
+          begin: pw.Alignment.centerLeft,
+          end: pw.Alignment.centerRight,
+        ),
+        borderRadius: pw.BorderRadius.circular(15),
       ),
       child: pw.Row(
         mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
         children: [
-          pw.Text(
-            title,
-            style: pw.TextStyle(
-              fontSize: 24,
-              fontWeight: pw.FontWeight.bold,
-              color: PdfColors.blue800,
+          pw.Expanded(
+            child: pw.Column(
+              crossAxisAlignment: pw.CrossAxisAlignment.start,
+              children: [
+                pw.Text(
+                  title.toUpperCase(),
+                  style: pw.TextStyle(
+                    fontSize: 26,
+                    fontWeight: pw.FontWeight.bold,
+                    color: PdfColors.white,
+                  ),
+                ),
+                pw.SizedBox(height: 8),
+                pw.Container(
+                  height: 3,
+                  width: 60,
+                  decoration: pw.BoxDecoration(
+                    color: PdfColors.white,
+                    borderRadius: pw.BorderRadius.circular(2),
+                  ),
+                ),
+              ],
             ),
           ),
-          pw.Text(
-            'Page ${context.pageNumber}',
-            style: pw.TextStyle(
-              fontSize: 12,
-              color: PdfColors.grey600,
+          pw.Container(
+            padding: pw.EdgeInsets.symmetric(horizontal: 15, vertical: 8),
+            decoration: pw.BoxDecoration(
+              color: PdfColor.fromHex('#FFFFFF30'),
+              borderRadius: pw.BorderRadius.circular(20),
+              border: pw.Border.all(color: PdfColor.fromHex('#FFFFFF50')),
+            ),
+            child: pw.Text(
+              'Page ${context.pageNumber}',
+              style: pw.TextStyle(
+                fontSize: 12,
+                color: PdfColors.white,
+                fontWeight: pw.FontWeight.bold,
+              ),
             ),
           ),
         ],
@@ -888,56 +1237,170 @@ class DocumentsScreenState extends State<DocumentsScreen>
     );
   }
 
-  // Helper method to build PDF section
+  // Helper method to get proper titles
+  String _getArabicTitle(String englishTitle) {
+    switch (englishTitle.toLowerCase()) {
+      case 'driver information':
+        return 'Driver Information';
+      case 'national documents':
+        return 'National Documents';
+      case 'driver license':
+        return 'Driver License';
+      case 'car documents':
+        return 'Car Documents';
+      default:
+        return englishTitle;
+    }
+  }
+
+  // Professional PDF section
   pw.Widget _buildPdfSection(String title, List<pw.Widget> content) {
+    String arabicSectionTitle = _getArabicSectionTitle(title);
+
     return pw.Container(
-      padding: pw.EdgeInsets.all(15),
+      margin: pw.EdgeInsets.only(bottom: 20),
       decoration: pw.BoxDecoration(
-        color: PdfColors.grey100,
-        borderRadius: pw.BorderRadius.circular(10),
-        border: pw.Border.all(color: PdfColors.grey300),
+        color: PdfColors.white,
+        borderRadius: pw.BorderRadius.circular(15),
+        border: pw.Border.all(color: PdfColors.blue100, width: 1.5),
       ),
       child: pw.Column(
         crossAxisAlignment: pw.CrossAxisAlignment.start,
         children: [
-          pw.Text(
-            title,
-            style: pw.TextStyle(
-              fontSize: 16,
-              fontWeight: pw.FontWeight.bold,
-              color: PdfColors.blue800,
+          // Section Header
+          pw.Container(
+            width: double.infinity,
+            padding: pw.EdgeInsets.all(20),
+            decoration: pw.BoxDecoration(
+              gradient: pw.LinearGradient(
+                colors: [PdfColors.blue50, PdfColors.blue100],
+                begin: pw.Alignment.centerLeft,
+                end: pw.Alignment.centerRight,
+              ),
+              borderRadius: pw.BorderRadius.only(
+                topLeft: pw.Radius.circular(15),
+                topRight: pw.Radius.circular(15),
+              ),
+            ),
+            child: pw.Row(
+              children: [
+                pw.Container(
+                  padding: pw.EdgeInsets.all(8),
+                  decoration: pw.BoxDecoration(
+                    color: PdfColors.blue600,
+                    borderRadius: pw.BorderRadius.circular(8),
+                  ),
+                  child: pw.Icon(
+                    _getSectionIcon(title),
+                    size: 16,
+                    color: PdfColors.white,
+                  ),
+                ),
+                pw.SizedBox(width: 12),
+                pw.Text(
+                  arabicSectionTitle,
+                  style: pw.TextStyle(
+                    fontSize: 18,
+                    fontWeight: pw.FontWeight.bold,
+                    color: PdfColors.blue800,
+                  ),
+                ),
+              ],
             ),
           ),
-          pw.SizedBox(height: 10),
-          ...content,
+          // Section Content
+          pw.Padding(
+            padding: pw.EdgeInsets.all(20),
+            child: pw.Column(
+              crossAxisAlignment: pw.CrossAxisAlignment.start,
+              children: content,
+            ),
+          ),
         ],
       ),
     );
   }
 
-  // Helper method to build PDF info row
+  // Helper method to get section titles
+  String _getArabicSectionTitle(String englishTitle) {
+    switch (englishTitle.toLowerCase()) {
+      case 'driver license details':
+        return 'Driver License Details';
+      case 'car information':
+        return 'Car Information';
+      default:
+        return englishTitle;
+    }
+  }
+
+  // Helper method to get section icons
+  pw.IconData _getSectionIcon(String title) {
+    switch (title.toLowerCase()) {
+      case 'driver license details':
+        return pw.IconData(0xe192); // license icon
+      case 'car information':
+        return pw.IconData(0xe158); // car icon
+      default:
+        return pw.IconData(0xe192);
+    }
+  }
+
+  // Professional PDF info row
   pw.Widget _buildPdfInfoRow(String label, String value) {
-    return pw.Padding(
-      padding: pw.EdgeInsets.symmetric(vertical: 4),
+    String arabicLabel = _getArabicLabel(label);
+
+    return pw.Container(
+      margin: pw.EdgeInsets.only(bottom: 12),
+      padding: pw.EdgeInsets.all(15),
+      decoration: pw.BoxDecoration(
+        color: PdfColors.grey50,
+        borderRadius: pw.BorderRadius.circular(10),
+        border: pw.Border.all(color: PdfColors.grey200),
+      ),
       child: pw.Row(
         crossAxisAlignment: pw.CrossAxisAlignment.start,
         children: [
           pw.Container(
-            width: 120,
+            padding: pw.EdgeInsets.all(6),
+            decoration: pw.BoxDecoration(
+              color: PdfColors.blue100,
+              borderRadius: pw.BorderRadius.circular(6),
+            ),
+            child: pw.Icon(
+              _getFieldIcon(label),
+              size: 12,
+              color: PdfColors.blue700,
+            ),
+          ),
+          pw.SizedBox(width: 12),
+          pw.Expanded(
+            flex: 2,
             child: pw.Text(
-              label,
+              arabicLabel,
               style: pw.TextStyle(
                 color: PdfColors.grey700,
                 fontWeight: pw.FontWeight.bold,
+                fontSize: 12,
               ),
             ),
           ),
           pw.SizedBox(width: 10),
           pw.Expanded(
-            child: pw.Text(
-              value,
-              style: pw.TextStyle(
-                color: PdfColors.black,
+            flex: 3,
+            child: pw.Container(
+              padding: pw.EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+              decoration: pw.BoxDecoration(
+                color: PdfColors.white,
+                borderRadius: pw.BorderRadius.circular(8),
+                border: pw.Border.all(color: PdfColors.blue200),
+              ),
+              child: pw.Text(
+                value.isNotEmpty ? value : 'Not Specified',
+                style: pw.TextStyle(
+                  color: value.isNotEmpty ? PdfColors.black : PdfColors.grey500,
+                  fontWeight: pw.FontWeight.normal,
+                  fontSize: 12,
+                ),
               ),
             ),
           ),
@@ -946,60 +1409,216 @@ class DocumentsScreenState extends State<DocumentsScreen>
     );
   }
 
-  // Helper method to build PDF image container
+  // Helper method to get field labels
+  String _getArabicLabel(String englishLabel) {
+    switch (englishLabel.toLowerCase()) {
+      case 'driver license number':
+        return 'Driver License Number';
+      case 'driver license expiry':
+        return 'Driver License Expiry';
+      case 'car type':
+        return 'Car Type';
+      case 'car color':
+        return 'Car Color';
+      case 'car plate number':
+        return 'Car Plate Number';
+      case 'car license expiry':
+        return 'Car License Expiry';
+      default:
+        return englishLabel;
+    }
+  }
+
+  // Helper method to get field icons
+  pw.IconData _getFieldIcon(String fieldName) {
+    switch (fieldName.toLowerCase()) {
+      case 'driver license number':
+      case 'driver license expiry':
+        return pw.IconData(0xe192); // license icon
+      case 'car type':
+      case 'car color':
+      case 'car plate number':
+      case 'car license expiry':
+        return pw.IconData(0xe158); // car icon
+      default:
+        return pw.IconData(0xe192);
+    }
+  }
+
+  // Professional PDF image container
   pw.Widget _buildPdfImageContainer(String label, Uint8List imageBytes,
       {bool isFullWidth = false}) {
+    String arabicImageLabel = _getArabicImageLabel(label);
+
     return pw.Container(
-      padding: pw.EdgeInsets.all(10),
       decoration: pw.BoxDecoration(
-        border: pw.Border.all(color: PdfColors.grey300),
-        borderRadius: pw.BorderRadius.circular(10),
+        color: PdfColors.white,
+        borderRadius: pw.BorderRadius.circular(13),
+        border: pw.Border.all(color: PdfColors.blue100, width: 1.5),
       ),
       child: pw.Column(
         crossAxisAlignment: pw.CrossAxisAlignment.start,
         children: [
-          pw.Text(
-            label,
-            style: pw.TextStyle(
-              fontSize: 14,
-              fontWeight: pw.FontWeight.bold,
-              color: PdfColors.blue600,
+          // Image Label
+          pw.Container(
+            width: double.infinity,
+            padding: pw.EdgeInsets.all(15),
+            decoration: pw.BoxDecoration(
+              color: PdfColors.blue50,
+              borderRadius: pw.BorderRadius.only(
+                topLeft: pw.Radius.circular(13),
+                topRight: pw.Radius.circular(13),
+              ),
+            ),
+            child: pw.Text(
+              arabicImageLabel,
+              style: pw.TextStyle(
+                fontSize: 14,
+                fontWeight: pw.FontWeight.bold,
+                color: PdfColors.blue800,
+              ),
+              textAlign: pw.TextAlign.center,
             ),
           ),
-          pw.SizedBox(height: 10),
-          pw.Image(
-            pw.MemoryImage(imageBytes),
-            fit: isFullWidth ? pw.BoxFit.fitWidth : pw.BoxFit.contain,
-            width: isFullWidth ? null : 200,
-            height: isFullWidth ? 200 : 150,
+          // Image Container
+          pw.Container(
+            padding: pw.EdgeInsets.all(15),
+            child: pw.Container(
+              decoration: pw.BoxDecoration(
+                border: pw.Border.all(color: PdfColors.grey300, width: 1),
+                borderRadius: pw.BorderRadius.circular(10),
+              ),
+              child: pw.Image(
+                pw.MemoryImage(imageBytes),
+                fit: isFullWidth ? pw.BoxFit.fitWidth : pw.BoxFit.contain,
+                width: isFullWidth ? null : double.infinity,
+                height: isFullWidth ? 200 : 180,
+              ),
+            ),
+          ),
+          // Image Footer
+          pw.Container(
+            padding: pw.EdgeInsets.symmetric(horizontal: 15, vertical: 10),
+            decoration: pw.BoxDecoration(
+              color: PdfColors.grey50,
+              borderRadius: pw.BorderRadius.only(
+                bottomLeft: pw.Radius.circular(13),
+                bottomRight: pw.Radius.circular(13),
+              ),
+            ),
+            child: pw.Text(
+              'Verified & Uploaded Successfully',
+              style: pw.TextStyle(
+                fontSize: 10,
+                color: PdfColors.green600,
+                fontWeight: pw.FontWeight.bold,
+              ),
+              textAlign: pw.TextAlign.center,
+            ),
           ),
         ],
       ),
     );
   }
 
-  // Helper method to build PDF footer
+  // Helper method to get image labels
+  String _getArabicImageLabel(String englishLabel) {
+    switch (englishLabel.toLowerCase()) {
+      case 'front id':
+        return 'Front ID';
+      case 'back id':
+        return 'Back ID';
+      case 'front license':
+        return 'Front License';
+      case 'back license':
+        return 'Back License';
+      case 'car front license':
+        return 'Car Front License';
+      case 'car back license':
+        return 'Car Back License';
+      case 'car image':
+        return 'Car Image';
+      default:
+        return englishLabel;
+    }
+  }
+
+  // Professional PDF footer
   pw.Widget _buildPdfFooter(pw.Context context) {
+    final currentDate = DateTime.now();
+    final formattedDate =
+        '${currentDate.year}-${currentDate.month.toString().padLeft(2, '0')}-${currentDate.day.toString().padLeft(2, '0')}';
+    final referenceNumber = 'DOC-${currentDate.millisecondsSinceEpoch}';
+
     return pw.Container(
-      padding: pw.EdgeInsets.only(top: 10),
+      padding: pw.EdgeInsets.all(20),
       decoration: pw.BoxDecoration(
-        border: pw.Border(top: pw.BorderSide(color: PdfColors.grey300)),
+        gradient: pw.LinearGradient(
+          colors: [PdfColors.grey50, PdfColors.grey100],
+          begin: pw.Alignment.centerLeft,
+          end: pw.Alignment.centerRight,
+        ),
+        borderRadius: pw.BorderRadius.circular(12),
+        border: pw.Border.all(color: PdfColors.grey300),
       ),
-      child: pw.Row(
-        mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+      child: pw.Column(
         children: [
-          pw.Text(
-            'generated in ${DateTime.now().toString().split(' ')[0]}',
-            style: pw.TextStyle(
-              fontSize: 10,
-              color: PdfColors.grey600,
-            ),
+          pw.Row(
+            mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+            children: [
+              // Generation Date
+              pw.Container(
+                padding: pw.EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                decoration: pw.BoxDecoration(
+                  color: PdfColors.white,
+                  borderRadius: pw.BorderRadius.circular(8),
+                  border: pw.Border.all(color: PdfColors.grey300),
+                ),
+                child: pw.Text(
+                  'Generated on: $formattedDate',
+                  style: pw.TextStyle(
+                    fontSize: 10,
+                    color: PdfColors.grey700,
+                    fontWeight: pw.FontWeight.bold,
+                  ),
+                ),
+              ),
+              // Reference Number
+              pw.Container(
+                padding: pw.EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                decoration: pw.BoxDecoration(
+                  color: PdfColors.white,
+                  borderRadius: pw.BorderRadius.circular(8),
+                  border: pw.Border.all(color: PdfColors.grey300),
+                ),
+                child: pw.Text(
+                  'Reference: $referenceNumber',
+                  style: pw.TextStyle(
+                    fontSize: 10,
+                    color: PdfColors.grey700,
+                    fontWeight: pw.FontWeight.bold,
+                  ),
+                ),
+              ),
+            ],
           ),
-          pw.Text(
-            'reference: DOC-${DateTime.now().millisecondsSinceEpoch}',
-            style: pw.TextStyle(
-              fontSize: 10,
-              color: PdfColors.grey600,
+          pw.SizedBox(height: 12),
+          // Security Notice
+          pw.Container(
+            padding: pw.EdgeInsets.all(10),
+            decoration: pw.BoxDecoration(
+              color: PdfColors.blue50,
+              borderRadius: pw.BorderRadius.circular(8),
+              border: pw.Border.all(color: PdfColors.blue200),
+            ),
+            child: pw.Text(
+              'Protected Official Document - For Official Use Only',
+              style: pw.TextStyle(
+                fontSize: 11,
+                color: PdfColors.blue700,
+                fontWeight: pw.FontWeight.bold,
+              ),
+              textAlign: pw.TextAlign.center,
             ),
           ),
         ],
@@ -1239,8 +1858,11 @@ class DocumentsScreenState extends State<DocumentsScreen>
       hasRejectedDocuments = false;
     });
 
+    // NEW: Clear preserved state since submission started
+    _clearPreservedState();
+
     // Show success message and navigate to pending page immediately
-    toast("تم بدء إرسال المستندات! جاري المراجعة... 🎉");
+    toast("تم تقديم المستندات بنجاح! 🎉 يمكنك مشاهدة شهادة التأكيد.");
 
     // Continue upload process in background
     _uploadInBackground();
@@ -1310,86 +1932,140 @@ class DocumentsScreenState extends State<DocumentsScreen>
     print(
         'Building box for $documentType, hasImage: $hasImage, imagePath: ${image?.path}');
 
-    return InkWell(
-      key: ValueKey('image_box_$documentType'),
-      onTap: onTap,
-      borderRadius: BorderRadius.circular(12),
-      child: Container(
-        decoration: BoxDecoration(
-          color:
-              hasImage ? Colors.green.withOpacity(0.05) : Colors.grey.shade50,
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        // Calculate height based on available width with minimum and maximum constraints
+        double height =
+            constraints.maxWidth.isFinite ? constraints.maxWidth * 0.8 : 120;
+        height = height.clamp(100.0, 200.0);
+
+        return InkWell(
+          key: ValueKey('image_box_$documentType'),
+          onTap: onTap,
           borderRadius: BorderRadius.circular(12),
-          border: Border.all(
-            color: hasImage ? Colors.green : Colors.grey.shade300,
-            width: hasImage ? 2 : 1,
-          ),
-        ),
-        child: Stack(
-          children: [
-            if (hasImage)
-              ClipRRect(
-                borderRadius: BorderRadius.circular(12),
-                child: Image.file(
-                  image,
-                  fit: BoxFit.cover,
-                  width: double.infinity,
-                  height: double.infinity,
-                ),
-              ),
-            Container(
-              decoration: BoxDecoration(
-                borderRadius: BorderRadius.circular(12),
-                color: hasImage
-                    ? Colors.black.withOpacity(0.3)
-                    : Colors.transparent,
-              ),
-              child: Padding(
-                padding: EdgeInsets.all(12),
-                child: Column(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    Container(
-                      padding: EdgeInsets.all(8),
-                      decoration: BoxDecoration(
-                        color: hasImage
-                            ? Colors.white.withOpacity(0.9)
-                            : primaryColor.withOpacity(0.1),
-                        shape: BoxShape.circle,
-                      ),
-                      child: Icon(
-                        hasImage ? Icons.check : icon,
-                        color: hasImage ? Colors.green : primaryColor,
-                        size: 20,
-                      ),
-                    ),
-                    SizedBox(height: 8),
-                    Text(
-                      title,
-                      style: boldTextStyle(
-                        size: 11,
-                        color: hasImage ? Colors.white : primaryColor,
-                      ),
-                      textAlign: TextAlign.center,
-                      maxLines: 2,
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                    if (!hasImage) ...[
-                      SizedBox(height: 4),
-                      Text(
-                        "اضغط للتحديد",
-                        style: secondaryTextStyle(
-                          size: 10,
-                          color: Colors.grey.shade600,
-                        ),
-                        textAlign: TextAlign.center,
-                      ),
-                    ],
-                  ],
-                ),
+          child: Container(
+            height: height,
+            constraints: BoxConstraints(
+              minHeight: 100,
+              maxHeight: 200,
+              minWidth: 80,
+            ),
+            decoration: BoxDecoration(
+              color: hasImage
+                  ? Colors.green.withOpacity(0.05)
+                  : Colors.grey.shade50,
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(
+                color: hasImage ? Colors.green : Colors.grey.shade300,
+                width: hasImage ? 2 : 1,
               ),
             ),
-          ],
-        ),
+            child: Stack(
+              children: [
+                if (hasImage && image!.existsSync())
+                  ClipRRect(
+                    borderRadius: BorderRadius.circular(12),
+                    child: Image.file(
+                      image!,
+                      fit: BoxFit.cover,
+                      width: double.infinity,
+                      height: double.infinity,
+                      errorBuilder: (context, error, stackTrace) {
+                        print('Error loading image for $documentType: $error');
+                        return _buildEmptyImageContainer(title, icon);
+                      },
+                    ),
+                  ),
+                Container(
+                  decoration: BoxDecoration(
+                    borderRadius: BorderRadius.circular(12),
+                    color: hasImage
+                        ? Colors.black.withOpacity(0.3)
+                        : Colors.transparent,
+                  ),
+                  child: Padding(
+                    padding: EdgeInsets.all(12),
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Container(
+                          padding: EdgeInsets.all(8),
+                          decoration: BoxDecoration(
+                            color: hasImage
+                                ? Colors.white.withOpacity(0.9)
+                                : primaryColor.withOpacity(0.1),
+                            shape: BoxShape.circle,
+                          ),
+                          child: Icon(
+                            hasImage ? Icons.check : icon,
+                            color: hasImage ? Colors.green : primaryColor,
+                            size: 20,
+                          ),
+                        ),
+                        SizedBox(height: 8),
+                        Flexible(
+                          child: Text(
+                            title,
+                            style: boldTextStyle(
+                              size: 11,
+                              color: hasImage ? Colors.white : primaryColor,
+                            ),
+                            textAlign: TextAlign.center,
+                            maxLines: 2,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+                        if (!hasImage) ...[
+                          SizedBox(height: 4),
+                          Flexible(
+                            child: Text(
+                              "اضغط للتحديد",
+                              style: secondaryTextStyle(
+                                size: 10,
+                                color: Colors.grey.shade600,
+                              ),
+                              textAlign: TextAlign.center,
+                            ),
+                          ),
+                        ],
+                      ],
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  // Helper method to build empty image container
+  Widget _buildEmptyImageContainer(String title, IconData icon) {
+    return Container(
+      decoration: BoxDecoration(
+        color: Colors.grey.shade50,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: Colors.grey.shade300),
+      ),
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Icon(icon, color: primaryColor, size: 24),
+          SizedBox(height: 8),
+          Text(
+            title,
+            style: boldTextStyle(size: 11, color: primaryColor),
+            textAlign: TextAlign.center,
+          ),
+          SizedBox(height: 4),
+          Text(
+            "فشل في تحميل الصورة",
+            style: secondaryTextStyle(size: 9, color: Colors.red),
+            textAlign: TextAlign.center,
+          ),
+        ],
       ),
     );
   }
@@ -1420,6 +2096,9 @@ class DocumentsScreenState extends State<DocumentsScreen>
   // Navigate to next page
   void _nextPage() {
     if (_currentPage < _totalPages - 1) {
+      // NEW: Preserve state before navigation
+      _preserveScreenState();
+
       _pageController.nextPage(
         duration: Duration(milliseconds: 300),
         curve: Curves.easeInOut,
@@ -1516,6 +2195,9 @@ class DocumentsScreenState extends State<DocumentsScreen>
   Widget build(BuildContext context) {
     return WillPopScope(
       onWillPop: () async {
+        // NEW: Always preserve state before navigation
+        _preserveScreenState();
+
         // Check document status before allowing navigation
         if (hasPendingDocuments) {
           // Documents are pending - show dialog and prevent navigation
@@ -1529,26 +2211,14 @@ class DocumentsScreenState extends State<DocumentsScreen>
           return false;
         }
 
-        // Only allow navigation if documents are approved or if navigating within the form
+        // If navigating within the form pages, handle internal navigation
         if (_currentPage > 0) {
           _previousPage();
           return false;
         }
 
-        // Allow normal navigation only if documents are approved
-        if (hasApprovedDocuments &&
-            !hasPendingDocuments &&
-            !hasRejectedDocuments) {
-          if (Navigator.canPop(context)) {
-            return true;
-          } else {
-            SystemNavigator.pop();
-            return false;
-          }
-        }
-
-        // For all other cases, prevent navigation
-        return false;
+        // Allow normal back navigation and preserve state
+        return true;
       },
       child: Scaffold(
         backgroundColor: Colors.grey.shade50,
@@ -1556,7 +2226,7 @@ class DocumentsScreenState extends State<DocumentsScreen>
           children: <Widget>[
             // Show only pending status page when documents are pending
             if (hasPendingDocuments)
-              _buildPendingOnlyPage()
+              _buildProfessionalSubmissionConfirmation()
             // Show only rejected status page when documents are rejected
             else if (hasRejectedDocuments)
               _buildRejectedOnlyPage()
@@ -1589,21 +2259,53 @@ class DocumentsScreenState extends State<DocumentsScreen>
                           },
                           itemCount: _totalPages,
                           itemBuilder: (context, index) {
-                            switch (index) {
-                              case 0:
-                                return _buildWelcomePage();
-                              case 1:
-                                return _buildPersonalDocumentsPage();
-                              case 2:
-                                return _buildDriverLicensePage();
-                              case 3:
-                                return _buildVehicleInfoPage();
-                              case 4:
-                                return _buildVehicleDocumentsPage();
-                              case 5:
-                                return _buildReviewPage();
-                              default:
-                                return Container();
+                            // NEW: Add safety check for widget building
+                            try {
+                              switch (index) {
+                                case 0:
+                                  return _buildWelcomePage();
+                                case 1:
+                                  return _buildPersonalDocumentsPage();
+                                case 2:
+                                  return _buildDriverLicensePage();
+                                case 3:
+                                  return _buildVehicleInfoPage();
+                                case 4:
+                                  return _buildVehicleDocumentsPage();
+                                case 5:
+                                  return _buildReviewPage();
+                                default:
+                                  return Container();
+                              }
+                            } catch (e) {
+                              print('Error building page $index: $e');
+                              // Return a safe fallback widget
+                              return Center(
+                                child: Column(
+                                  mainAxisAlignment: MainAxisAlignment.center,
+                                  children: [
+                                    Icon(Icons.error_outline,
+                                        size: 50, color: Colors.grey),
+                                    SizedBox(height: 16),
+                                    Text('حدث خطأ في تحميل الصفحة',
+                                        style: TextStyle(color: Colors.grey)),
+                                    SizedBox(height: 16),
+                                    ElevatedButton(
+                                      onPressed: () {
+                                        // Reset to first page
+                                        setState(() {
+                                          _currentPage = 0;
+                                        });
+                                        _pageController.animateToPage(0,
+                                            duration:
+                                                Duration(milliseconds: 300),
+                                            curve: Curves.easeInOut);
+                                      },
+                                      child: Text('العودة للبداية'),
+                                    ),
+                                  ],
+                                ),
+                              );
                             }
                           },
                         ),
@@ -1665,204 +2367,169 @@ class DocumentsScreenState extends State<DocumentsScreen>
 
   // Build dedicated pending-only page
   Widget _buildPendingOnlyPage() {
-    return Column(
-      children: [
-        const BackAppBar(
-            title: 'الوثائق والمستندات'), // Expanded pending content
-        Expanded(
-          child: Padding(
-            padding: EdgeInsets.all(20),
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                // Large pending icon with animation
-                Container(
-                  padding: EdgeInsets.all(40),
-                  decoration: BoxDecoration(
-                    gradient: LinearGradient(
-                      begin: Alignment.topLeft,
-                      end: Alignment.bottomRight,
-                      colors: [
-                        Colors.orange.withOpacity(0.1),
-                        Colors.orange.withOpacity(0.05),
+    return Scaffold(
+      appBar: const BackAppBar(title: 'الوثائق والمستندات'),
+      body: SingleChildScrollView(
+        child: Padding(
+          padding: EdgeInsets.all(20),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              // Large pending icon with animation
+              Container(
+                padding: EdgeInsets.all(40),
+                decoration: BoxDecoration(
+                  gradient: LinearGradient(
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight,
+                    colors: [
+                      Colors.orange.withOpacity(0.1),
+                      Colors.orange.withOpacity(0.05),
+                    ],
+                  ),
+                  shape: BoxShape.circle,
+                ),
+                child: Icon(
+                  Icons.pending_actions,
+                  size: 60,
+                  color: Colors.orange,
+                ),
+              ),
+
+              SizedBox(height: 20),
+
+              // Main message
+              Text(
+                "المستندات قيد المراجعة",
+                style: boldTextStyle(size: 20, color: Colors.black87),
+                textAlign: TextAlign.center,
+              ),
+
+              SizedBox(height: 16),
+
+              Text(
+                "تم استلام مستنداتك بنجاح",
+                style: boldTextStyle(size: 18, color: Colors.orange),
+                textAlign: TextAlign.center,
+              ),
+
+              SizedBox(height: 24),
+
+              Text(
+                "يرجى الانتظار حتى تتم مراجعة واعتماد مستنداتك من قبل فريق الإدارة",
+                style:
+                    secondaryTextStyle(size: 16, color: Colors.grey.shade600),
+                textAlign: TextAlign.center,
+              ),
+
+              SizedBox(height: 40),
+
+              // Status info card
+              Container(
+                padding: EdgeInsets.all(20),
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(16),
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.grey.withOpacity(0.1),
+                      blurRadius: 10,
+                      offset: Offset(0, 4),
+                    ),
+                  ],
+                ),
+                child: Column(
+                  children: [
+                    Row(
+                      children: [
+                        Icon(Icons.info_outline, color: Colors.orange),
+                        SizedBox(width: 12),
+                        Text(
+                          "معلومات المراجعة",
+                          style: boldTextStyle(size: 16),
+                        ),
                       ],
                     ),
-                    shape: BoxShape.circle,
-                  ),
-                  child: Icon(
-                    Icons.pending_actions,
-                    size: 60,
-                    color: Colors.orange,
-                  ),
+                    SizedBox(height: 16),
+                    _buildStatusRow(
+                      "وقت التقديم",
+                      DateTime.now().toString().split('.')[0],
+                      Icons.access_time,
+                    ),
+                    Divider(height: 24),
+                    _buildStatusRow(
+                      "الحالة الحالية",
+                      "قيد المراجعة",
+                      Icons.hourglass_empty,
+                      color: Colors.orange,
+                    ),
+                    Divider(height: 24),
+                    _buildStatusRow(
+                      "الوقت المتوقع",
+                      "24-48 ساعة",
+                      Icons.schedule,
+                    ),
+                  ],
                 ),
+              ),
 
-                SizedBox(height: 20),
+              SizedBox(height: 40),
 
-                // Main message
-                Text(
-                  "المستندات قيد المراجعة",
-                  style: boldTextStyle(size: 20, color: Colors.black87),
-                  textAlign: TextAlign.center,
+              // Note
+              Container(
+                padding: EdgeInsets.all(16),
+                margin: EdgeInsets.only(bottom: 20),
+                decoration: BoxDecoration(
+                  color: Colors.blue.withOpacity(0.1),
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(color: Colors.blue.withOpacity(0.3)),
                 ),
-
-                SizedBox(height: 16),
-
-                Text(
-                  "تم استلام مستنداتك بنجاح",
-                  style: boldTextStyle(size: 18, color: Colors.orange),
-                  textAlign: TextAlign.center,
-                ),
-
-                SizedBox(height: 24),
-
-                Text(
-                  "يرجى الانتظار حتى تتم مراجعة واعتماد مستنداتك من قبل فريق الإدارة",
-                  style:
-                      secondaryTextStyle(size: 16, color: Colors.grey.shade600),
-                  textAlign: TextAlign.center,
-                ),
-
-                SizedBox(height: 40),
-
-                // Add refresh button above existing refresh button
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.start,
+                child: Row(
                   children: [
-                    InkWell(
-                      onTap: () async {
-                        // Refresh document status instead of skip
-                        await _refreshDocumentStatus();
-                      },
-                      child: Container(
-                        padding:
-                            EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                        decoration: BoxDecoration(
-                          color: primaryColor.withOpacity(0.1),
-                          borderRadius: BorderRadius.circular(12),
-                        ),
-                        child: Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Icon(
-                              Icons.refresh,
-                              size: 16,
-                              color: primaryColor,
-                            ),
-                            SizedBox(width: 4),
-                            Text(
-                              "تحديث الحالة",
-                              style:
-                                  boldTextStyle(size: 12, color: primaryColor),
-                            ),
-                          ],
-                        ),
+                    Icon(Icons.lightbulb_outline, color: Colors.blue),
+                    SizedBox(width: 12),
+                    Expanded(
+                      child: Text(
+                        "سيتم إشعارك فور اكتمال مراجعة مستنداتك",
+                        style: secondaryTextStyle(color: Colors.blue.shade700),
                       ),
                     ),
                   ],
                 ),
+              ),
 
-                SizedBox(height: 20),
-
-                /*    // Status info card
-                Container(
-                  padding: EdgeInsets.all(20),
-                  decoration: BoxDecoration(
-                    color: Colors.white,
-                    borderRadius: BorderRadius.circular(16),
-                    boxShadow: [
-                      BoxShadow(
-                        color: Colors.grey.withOpacity(0.1),
-                        blurRadius: 10,
-                        offset: Offset(0, 4),
-                      ),
-                    ],
-                  ),
-                  child: Column(
-                    children: [
-                      Row(
-                        children: [
-                          Icon(Icons.info_outline, color: Colors.orange),
-                          SizedBox(width: 12),
-                          Text(
-                            "معلومات المراجعة",
-                            style: boldTextStyle(size: 16),
-                          ),
-                        ],
-                      ),
-                      SizedBox(height: 16),
-                      _buildStatusRow(
-                        "وقت التقديم",
-                        DateTime.now().toString().split('.')[0].split(' ')[0],
-                        Icons.access_time,
-                      ),
-                      Divider(height: 24),
-                      _buildStatusRow(
-                        "الحالة الحالية",
-                        "قيد المراجعة",
-                        Icons.hourglass_empty,
-                        color: Colors.orange,
-                      ),
-                      Divider(height: 24),
-                      _buildStatusRow(
-                        "الوقت المتوقع",
-                        "24-48 ساعة",
-                        Icons.schedule,
-                      ),
-                    ],
-                  ),
-                ),
-
-                SizedBox(height: 30), */
-
-                // Refresh button
-                Container(
-                  width: double.infinity,
-                  height: 50,
-                  child: ElevatedButton.icon(
-                    onPressed: _refreshDocumentStatus,
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: Colors.orange,
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(12),
-                      ),
+              // Refresh button
+              Container(
+                width: double.infinity,
+                height: 55,
+                child: ElevatedButton(
+                  onPressed: () async {
+                    await _refreshDocumentStatus();
+                  },
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: primaryColor,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12),
                     ),
-                    icon: Icon(Icons.refresh, color: Colors.white),
-                    label: Text(
-                      "تحديث حالة المراجعة",
-                      style: boldTextStyle(color: Colors.white, size: 16),
-                    ),
-                  ),
-                ),
-
-                SizedBox(height: 20),
-
-                // Note
-                Container(
-                  padding: EdgeInsets.all(16),
-                  decoration: BoxDecoration(
-                    color: Colors.blue.withOpacity(0.1),
-                    borderRadius: BorderRadius.circular(12),
-                    border: Border.all(color: Colors.blue.withOpacity(0.3)),
+                    elevation: 2,
                   ),
                   child: Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
                     children: [
-                      Icon(Icons.lightbulb_outline, color: Colors.blue),
+                      Icon(Icons.refresh, color: Colors.white, size: 24),
                       SizedBox(width: 12),
-                      Expanded(
-                        child: Text(
-                          "سيتم إشعارك فور اكتمال مراجعة مستنداتك",
-                          style:
-                              secondaryTextStyle(color: Colors.blue.shade700),
-                        ),
+                      Text(
+                        "تحديث حالة المراجعة",
+                        style: boldTextStyle(color: Colors.white, size: 18),
                       ),
                     ],
                   ),
                 ),
-              ],
-            ),
+              ),
+            ],
           ),
         ),
-      ],
+      ),
     );
   }
 
@@ -2256,6 +2923,60 @@ class DocumentsScreenState extends State<DocumentsScreen>
                       return null;
                     },
                   ),
+                  SizedBox(height: 16),
+                  DropdownButtonFormField<int>(
+                    decoration: InputDecoration(
+                      labelText: 'نوع المركبة',
+                      hintText: 'اختر نوع المركبة',
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(12),
+                        borderSide: BorderSide(color: Colors.grey.shade300),
+                      ),
+                      enabledBorder: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(12),
+                        borderSide: BorderSide(color: Colors.grey.shade300),
+                      ),
+                      focusedBorder: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(12),
+                        borderSide: BorderSide(color: primaryColor),
+                      ),
+                      filled: true,
+                      fillColor: Colors.white,
+                      contentPadding:
+                          EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                      prefixIcon: Icon(Icons.directions_car,
+                          color: Colors.grey.shade600),
+                    ),
+                    value: selectedServiceId,
+                    onChanged: (int? newValue) {
+                      setState(() {
+                        selectedServiceId = newValue!;
+                      });
+                      _autoSaveVehicleInfo();
+                    },
+                    items: serviceList
+                        .map<DropdownMenuItem<int>>((ServiceList service) {
+                      return DropdownMenuItem<int>(
+                        value: service.id,
+                        child: Text(
+                          service.name ?? '',
+                          style: TextStyle(
+                            fontSize: 14,
+                            color: Colors.black87,
+                          ),
+                        ),
+                      );
+                    }).toList(),
+                    icon: Icon(Icons.keyboard_arrow_down,
+                        color: Colors.grey.shade600),
+                    isExpanded: true,
+                    validator: (value) {
+                      if (value == null) {
+                        return 'الرجاء اختيار نوع المركبة';
+                      }
+                      return null;
+                    },
+                  ),
                 ],
               ),
             ),
@@ -2289,6 +3010,7 @@ class DocumentsScreenState extends State<DocumentsScreen>
         carColor: carColorController.text.trim(),
         carPlateNumber: carPlateNumberController.text.trim(),
         carProduction: carLicenseExpiryController.text.trim(),
+        serviceId: selectedServiceId,
       ).then((value) {
         // Show a subtle indication that data was saved
         ScaffoldMessenger.of(context).showSnackBar(
@@ -3607,6 +4329,9 @@ class DocumentsScreenState extends State<DocumentsScreen>
                         rejectionReason = null;
                       });
 
+                      // NEW: Clear any preserved state since we're starting fresh
+                      _clearPreservedState();
+
                       // Navigate to welcome page
                       _pageController.animateToPage(
                         0,
@@ -3658,5 +4383,484 @@ class DocumentsScreenState extends State<DocumentsScreen>
         ),
       ],
     );
+  }
+
+  // NEW: Professional Document Submission Confirmation Page
+  Widget _buildProfessionalSubmissionConfirmation() {
+    final currentDate = DateTime.now();
+    final referenceNumber = 'DOC-${currentDate.millisecondsSinceEpoch}';
+    final formattedDate =
+        '${currentDate.year}-${currentDate.month.toString().padLeft(2, '0')}-${currentDate.day.toString().padLeft(2, '0')}';
+
+    return Container(
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          begin: Alignment.topCenter,
+          end: Alignment.bottomCenter,
+          colors: [
+            Colors.blue.shade50,
+            Colors.white,
+            Colors.grey.shade50,
+          ],
+        ),
+      ),
+      child: SafeArea(
+        child: SingleChildScrollView(
+          padding: EdgeInsets.all(20),
+          child: Column(
+            children: [
+              SizedBox(height: 40),
+
+              // Header with logo and title
+              Container(
+                padding: EdgeInsets.all(30),
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(20),
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.black.withOpacity(0.08),
+                      blurRadius: 20,
+                      offset: Offset(0, 8),
+                    ),
+                  ],
+                ),
+                child: Column(
+                  children: [
+                    // Success Icon with animation
+                    Container(
+                      padding: EdgeInsets.all(20),
+                      decoration: BoxDecoration(
+                        gradient: LinearGradient(
+                          colors: [
+                            Colors.green.shade400,
+                            Colors.green.shade600
+                          ],
+                        ),
+                        shape: BoxShape.circle,
+                        boxShadow: [
+                          BoxShadow(
+                            color: Colors.green.withOpacity(0.3),
+                            blurRadius: 15,
+                            offset: Offset(0, 5),
+                          ),
+                        ],
+                      ),
+                      child: Icon(
+                        Icons.verified_outlined,
+                        size: 50,
+                        color: Colors.white,
+                      ),
+                    ),
+
+                    SizedBox(height: 25),
+
+                    // Main Title
+                    Text(
+                      'تم تقديم المستندات بنجاح',
+                      style: TextStyle(
+                        fontSize: 26,
+                        fontWeight: FontWeight.bold,
+                        color: Colors.grey.shade800,
+                        letterSpacing: 0.5,
+                      ),
+                      textAlign: TextAlign.center,
+                    ),
+
+                    SizedBox(height: 12),
+
+                    Text(
+                      'أوراق السائق الرسمية',
+                      style: TextStyle(
+                        fontSize: 18,
+                        fontWeight: FontWeight.w500,
+                        color: Colors.blue.shade700,
+                      ),
+                      textAlign: TextAlign.center,
+                    ),
+                  ],
+                ),
+              ),
+
+              SizedBox(height: 30),
+
+              // Document Details Card
+              Container(
+                padding: EdgeInsets.all(25),
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(16),
+                  border: Border.all(color: Colors.blue.shade100, width: 1.5),
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.black.withOpacity(0.05),
+                      blurRadius: 10,
+                      offset: Offset(0, 4),
+                    ),
+                  ],
+                ),
+                child: Column(
+                  children: [
+                    // Document Info Header
+                    Container(
+                      padding:
+                          EdgeInsets.symmetric(vertical: 12, horizontal: 20),
+                      decoration: BoxDecoration(
+                        gradient: LinearGradient(
+                          colors: [Colors.blue.shade600, Colors.blue.shade700],
+                        ),
+                        borderRadius: BorderRadius.circular(25),
+                      ),
+                      child: Text(
+                        'معلومات التقديم',
+                        style: TextStyle(
+                          color: Colors.white,
+                          fontSize: 16,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                    ),
+
+                    SizedBox(height: 25),
+
+                    // Submission Date
+                    _buildProfessionalInfoRow(
+                      icon: Icons.calendar_today_outlined,
+                      label: 'تاريخ التقديم',
+                      value: formattedDate,
+                      iconColor: Colors.blue.shade600,
+                    ),
+
+                    SizedBox(height: 20),
+
+                    // Reference Number
+                    _buildProfessionalInfoRow(
+                      icon: Icons.confirmation_number_outlined,
+                      label: 'رقم المرجع',
+                      value: referenceNumber,
+                      iconColor: Colors.orange.shade600,
+                    ),
+
+                    SizedBox(height: 20),
+
+                    // Status
+                    _buildProfessionalInfoRow(
+                      icon: Icons.pending_actions_outlined,
+                      label: 'الحالة',
+                      value: 'قيد المراجعة',
+                      iconColor: Colors.amber.shade600,
+                    ),
+                  ],
+                ),
+              ),
+
+              SizedBox(height: 25),
+
+              // Progress Timeline
+              Container(
+                padding: EdgeInsets.all(20),
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(16),
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.black.withOpacity(0.05),
+                      blurRadius: 10,
+                      offset: Offset(0, 4),
+                    ),
+                  ],
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'مراحل المراجعة',
+                      style: TextStyle(
+                        fontSize: 18,
+                        fontWeight: FontWeight.bold,
+                        color: Colors.grey.shade800,
+                      ),
+                    ),
+                    SizedBox(height: 20),
+                    _buildTimelineStep(
+                      title: 'تم استلام المستندات',
+                      subtitle: 'تم رفع جميع المستندات المطلوبة',
+                      isCompleted: true,
+                      isActive: false,
+                    ),
+                    _buildTimelineStep(
+                      title: 'مراجعة المستندات',
+                      subtitle: 'جاري مراجعة صحة ووضوح المستندات',
+                      isCompleted: false,
+                      isActive: true,
+                    ),
+                    _buildTimelineStep(
+                      title: 'اعتماد الحساب',
+                      subtitle: 'ستتمكن من بدء العمل بعد الاعتماد',
+                      isCompleted: false,
+                      isActive: false,
+                      isLast: true,
+                    ),
+                  ],
+                ),
+              ),
+
+              SizedBox(height: 25),
+
+              // Important Notes
+              Container(
+                padding: EdgeInsets.all(20),
+                decoration: BoxDecoration(
+                  color: Colors.amber.shade50,
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(color: Colors.amber.shade200),
+                ),
+                child: Row(
+                  children: [
+                    Icon(
+                      Icons.info_outline,
+                      color: Colors.amber.shade700,
+                      size: 24,
+                    ),
+                    SizedBox(width: 15),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            'ملاحظة هامة',
+                            style: TextStyle(
+                              fontWeight: FontWeight.bold,
+                              color: Colors.amber.shade800,
+                              fontSize: 16,
+                            ),
+                          ),
+                          SizedBox(height: 5),
+                          Text(
+                            'ستصلك رسالة تأكيد خلال 24-48 ساعة بنتيجة مراجعة المستندات',
+                            style: TextStyle(
+                              color: Colors.amber.shade700,
+                              fontSize: 14,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+
+              SizedBox(height: 30),
+
+              // Footer - Restricted Notice
+              Container(
+                padding: EdgeInsets.all(15),
+                decoration: BoxDecoration(
+                  color: Colors.grey.shade100,
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(color: Colors.grey.shade300),
+                ),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Icon(
+                      Icons.security_outlined,
+                      color: Colors.grey.shade600,
+                      size: 18,
+                    ),
+                    SizedBox(width: 8),
+                    Text(
+                      'محفوظ - للاستخدام الرسمي فقط',
+                      style: TextStyle(
+                        color: Colors.grey.shade600,
+                        fontSize: 12,
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+
+              SizedBox(height: 30),
+
+              // Action Buttons
+              SizedBox(
+                width: double.infinity,
+                child: ElevatedButton.icon(
+                  onPressed: _refreshDocumentStatus,
+                  icon: Icon(Icons.refresh, color: Colors.white),
+                  label: Text(
+                    "تحديث الحالة",
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontWeight: FontWeight.bold,
+                      fontSize: 16,
+                    ),
+                  ),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: primaryColor,
+                    padding: EdgeInsets.symmetric(vertical: 16),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    elevation: 2,
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  // Professional Info Row Widget
+  Widget _buildProfessionalInfoRow({
+    required IconData icon,
+    required String label,
+    required String value,
+    required Color iconColor,
+  }) {
+    return Container(
+      padding: EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: Colors.grey.shade50,
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: Colors.grey.shade200),
+      ),
+      child: Row(
+        children: [
+          Container(
+            padding: EdgeInsets.all(8),
+            decoration: BoxDecoration(
+              color: iconColor.withOpacity(0.1),
+              borderRadius: BorderRadius.circular(8),
+            ),
+            child: Icon(icon, color: iconColor, size: 20),
+          ),
+          SizedBox(width: 15),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  label,
+                  style: TextStyle(
+                    fontSize: 12,
+                    color: Colors.grey.shade600,
+                    fontWeight: FontWeight.w500,
+                  ),
+                ),
+                SizedBox(height: 4),
+                Text(
+                  value,
+                  style: TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.bold,
+                    color: Colors.grey.shade800,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // Timeline Step Widget
+  Widget _buildTimelineStep({
+    required String title,
+    required String subtitle,
+    required bool isCompleted,
+    required bool isActive,
+    bool isLast = false,
+  }) {
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Column(
+          children: [
+            Container(
+              width: 24,
+              height: 24,
+              decoration: BoxDecoration(
+                color: isCompleted
+                    ? Colors.green
+                    : isActive
+                        ? Colors.blue
+                        : Colors.grey.shade300,
+                shape: BoxShape.circle,
+                border: Border.all(
+                  color: isCompleted
+                      ? Colors.green
+                      : isActive
+                          ? Colors.blue
+                          : Colors.grey.shade400,
+                  width: 2,
+                ),
+              ),
+              child: Icon(
+                isCompleted
+                    ? Icons.check
+                    : isActive
+                        ? Icons.access_time
+                        : Icons.circle,
+                color: Colors.white,
+                size: 12,
+              ),
+            ),
+            if (!isLast)
+              Container(
+                width: 2,
+                height: 40,
+                color: Colors.grey.shade300,
+              ),
+          ],
+        ),
+        SizedBox(width: 15),
+        Expanded(
+          child: Padding(
+            padding: EdgeInsets.only(top: 2),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  title,
+                  style: TextStyle(
+                    fontWeight: FontWeight.bold,
+                    fontSize: 16,
+                    color: isActive || isCompleted
+                        ? Colors.grey.shade800
+                        : Colors.grey.shade500,
+                  ),
+                ),
+                SizedBox(height: 4),
+                Text(
+                  subtitle,
+                  style: TextStyle(
+                    fontSize: 14,
+                    color: Colors.grey.shade600,
+                  ),
+                ),
+                if (!isLast) SizedBox(height: 20),
+              ],
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  // Generate PDF Confirmation
+  void _generateConfirmationPDF() async {
+    // Implementation to generate and download PDF confirmation
+    toast('جاري تحضير ملف التأكيد...');
+    // Add PDF generation logic here
+  }
+
+  // Method to show professional confirmation as separate screen
+  static void showProfessionalConfirmation(BuildContext context) {
+    toast('This method is deprecated.');
   }
 }

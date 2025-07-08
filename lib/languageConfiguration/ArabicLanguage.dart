@@ -646,4 +646,13 @@ class ArabicLanguage extends BaseLanguage {
 
   @override
   String get weWillSendOtp => "سنرسل رمز التحقق (OTP) إلى رقم هاتفك للتحقق";
+
+  @override
+  String get updateNow => "تحديث الان";
+
+  @override
+  String get chooseYourServiceType => "اختر نوع الخدمة";
+
+  @override
+  String get capacity => "السعة";
 }

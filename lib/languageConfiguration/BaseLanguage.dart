@@ -589,4 +589,8 @@ class BaseLanguage {
   String get updateNote => getContentValueFromKey(388);
 
   String get updateNow => getContentValueFromKey(389);
+
+  String get chooseYourServiceType => getContentValueFromKey(390);
+
+  String get capacity => getContentValueFromKey(391);
 }

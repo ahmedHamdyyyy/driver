@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:taxi_driver/core/constant/app_colors.dart';
 import 'package:taxi_driver/core/utils/responsive_vertical_space.dart';
 import 'package:taxi_driver/screens/auth/presentation/widgets/auth_content/login_widget.dart';
-import 'package:taxi_driver/screens/auth/presentation/widgets/auth_content/sign_up_widget.dart';
+import 'package:taxi_driver/screens/auth/presentation/widgets/auth_content/new_signup_widget.dart';
 
 class AuthTaps extends StatefulWidget {
   const AuthTaps({super.key});
@@ -73,7 +73,7 @@ class _AuthTapsState extends State<AuthTaps> {
         ),
         const ResponsiveVerticalSpace(39),
         if (login) const LoginWidget(),
-        if (!login) const SignUpWidget(),
+        if (!login) const NewSignUpWidget(),
       ],
     );
   }

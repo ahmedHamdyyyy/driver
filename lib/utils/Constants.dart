@@ -20,7 +20,7 @@ const defaultCountry = 'IN';
 //endregion
 
 //region decimal
-const digitAfterDecimal = 2;
+const digitAfterDecimal = 1;
 //endregion
 
 //region OneSignal Keys

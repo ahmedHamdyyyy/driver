@@ -172,6 +172,95 @@ class _ZegoTestScreenState extends State<ZegoTestScreen> {
     setState(() => _isLoading = false);
   }
 
+  Future<void> _testCallRider() async {
+    setState(() => _isLoading = true);
+    _updateStatus('📞 Testing call to rider...');
+
+    try {
+      // Test video call
+      _addLog('📹 Testing video call to rider...');
+      bool videoResult = await DriverZegoService.testCallRider(
+        context: context,
+        testRiderPhone: "966501234567",
+        testRiderName: "Test Rider",
+        isVideoCall: true,
+      );
+      _addLog('📹 Video call result: $videoResult');
+
+      // Wait a bit before voice call test
+      await Future.delayed(Duration(seconds: 2));
+
+      // Test voice call
+      _addLog('📞 Testing voice call to rider...');
+      bool voiceResult = await DriverZegoService.testCallRider(
+        context: context,
+        testRiderPhone: "966501234567",
+        testRiderName: "Test Rider",
+        isVideoCall: false,
+      );
+      _addLog('📞 Voice call result: $voiceResult');
+
+      if (videoResult && voiceResult) {
+        _updateStatus('✅ Call tests successful - driver can call riders!');
+      } else {
+        _updateStatus('⚠️ Some call tests failed - check configuration');
+      }
+    } catch (e) {
+      _addLog('❌ Call test error: $e');
+      _updateStatus('❌ Call test error: $e');
+    }
+
+    setState(() => _isLoading = false);
+  }
+
+  void _showCallStatus() {
+    Map<String, dynamic> status = DriverZegoService.getCallStatus();
+
+    _addLog('📊 Current call status:');
+    status.forEach((key, value) {
+      _addLog('   $key: $value');
+    });
+
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text('Call Status'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: status.entries
+              .map(
+                (entry) => Padding(
+                  padding: EdgeInsets.only(bottom: 8),
+                  child: Row(
+                    children: [
+                      Expanded(
+                        flex: 2,
+                        child: Text(
+                          entry.key,
+                          style: TextStyle(fontWeight: FontWeight.bold),
+                        ),
+                      ),
+                      Expanded(
+                        flex: 3,
+                        child: Text(entry.value.toString()),
+                      ),
+                    ],
+                  ),
+                ),
+              )
+              .toList(),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: Text('Close'),
+          ),
+        ],
+      ),
+    );
+  }
+
   void _printDebugInfo() {
     _addLog('📋 Printing comprehensive debug info...');
     DriverZegoService.printDebugInfo();
@@ -271,6 +360,10 @@ class _ZegoTestScreenState extends State<ZegoTestScreen> {
                       '📋 Print Debug Info', _printDebugInfo, Colors.indigo),
                   _buildTestButton(
                       '📞 Simulate Call', _simulateIncomingCall, Colors.red),
+                  _buildTestButton(
+                      '📱 Test Call Rider', _testCallRider, Colors.deepOrange),
+                  _buildTestButton(
+                      '📊 Show Call Status', _showCallStatus, Colors.cyan),
                   _buildTestButton('🧹 Clear Logs', _clearLogs, Colors.grey),
 
                   SizedBox(height: 20),

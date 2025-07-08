@@ -101,9 +101,9 @@ dependencies:
   # Temporarily disable vibration plugin due to Flutter v1 embedding compatibility issues
   # vibration: ^1.9.0
   # ZEGO VIDEO CALLING SDK
-  zego_uikit_prebuilt_call: ^4.0.0
-  zego_uikit_signaling_plugin: ^2.0.0
-  zego_uikit: ^2.0.0
+  zego_uikit_prebuilt_call: ^4.12.6
+  zego_uikit_signaling_plugin: ^2.8.4
+  zego_uikit: ^2.22.3
 
   flutter_localizations:
     sdk: flutter

@@ -1,13 +1,25 @@
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:file_picker/file_picker.dart';
+import 'package:flutter/material.dart';
+import 'package:geocoding/geocoding.dart';
+import 'package:geolocator/geolocator.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'package:http/http.dart';
+import 'package:http/http.dart' as http;
+import 'package:taxi_driver/model/ComplaintCommentModel.dart';
+import 'package:taxi_driver/model/DriverRatting.dart';
+import 'package:taxi_driver/model/LoginResponse.dart';
+import 'package:taxi_driver/model/PaymentCardModel.dart';
+import 'package:taxi_driver/model/WalletDetailModel.dart';
+import 'package:taxi_driver/utils/Constants.dart';
 import 'package:taxi_driver/model/DocumentListModel.dart';
 import 'package:taxi_driver/model/RideDetailModel.dart';
 import 'package:taxi_driver/model/RiderListModel.dart';
 import 'package:taxi_driver/model/UserDetailModel.dart';
 import 'package:taxi_driver/utils/Extensions/dataTypeExtensions.dart';
+import 'package:taxi_driver/utils/NewDriverDataCleaner.dart';
 
 import '../languageConfiguration/ServerLanguageResponse.dart';
 import '../main.dart';
@@ -30,10 +42,8 @@ import '../model/WalletDetailModel.dart';
 import '../model/WalletListModel.dart';
 import '../model/WithDrawListModel.dart';
 import '../screens/SignInScreen.dart';
-import '../utils/Constants.dart';
 import '../utils/Extensions/app_common.dart';
 import 'NetworkUtils.dart';
-import 'package:taxi_driver/model/DriverRatting.dart';
 
 Future<LoginResponse> signUpApi(Map request) async {
   Response response = await buildHttpResponse('driver-register',
@@ -86,7 +96,7 @@ Future<LoginResponse> signUpApi(Map request) async {
     return loginResponse;
   }).catchError((e) {
     toast(e.toString());
-    return e;
+    throw e;
   });
 }
 
@@ -453,7 +463,8 @@ Future updateVehicleDetail(
     {String? carModel,
     String? carColor,
     String? carPlateNumber,
-    String? carProduction}) async {
+    String? carProduction,
+    int? serviceId}) async {
   MultipartRequest multiPartRequest =
       await getMultiPartRequest('update-profile');
   multiPartRequest.fields['id'] = sharedPref.getInt(USER_ID).toString();
@@ -469,6 +480,8 @@ Future updateVehicleDetail(
       carPlateNumber.validate();
   multiPartRequest.fields['user_detail[car_production_year]'] =
       carProduction.validate();
+  if (serviceId != null)
+    multiPartRequest.fields['service_id'] = serviceId.toString();
 
   await sendMultiPartRequest(multiPartRequest, onSuccess: (data) async {
     if (data != null) {
@@ -676,19 +689,19 @@ Future<LDBaseResponse> logoutApi() async {
 }
 
 logOutSuccess() async {
-  sharedPref.remove(FIRST_NAME);
-  sharedPref.remove(LAST_NAME);
-  sharedPref.remove(USER_PROFILE_PHOTO);
-  sharedPref.remove(USER_NAME);
-  sharedPref.remove(USER_ADDRESS);
-  sharedPref.remove(CONTACT_NUMBER);
-  sharedPref.remove(GENDER);
-  sharedPref.remove(UID);
-  sharedPref.remove(TOKEN);
-  sharedPref.remove(USER_TYPE);
-  sharedPref.remove(ADDRESS);
-  sharedPref.remove(USER_ID);
+  String? language = sharedPref.getString(CHANGE_LANGUAGE);
+
+  // Clear all driver data using the new cleaner utility
+  await NewDriverDataCleaner.clearDataOnLogout();
+
+  sharedPref.clear();
+
+  if (language != null) {
+    sharedPref.setString(CHANGE_LANGUAGE, language);
+  }
+
   appStore.setLoggedIn(false);
+
   if (!(sharedPref.getBool(REMEMBER_ME) ?? false) ||
       sharedPref.getString(LOGIN_TYPE) == LoginTypeGoogle ||
       sharedPref.getString(LOGIN_TYPE) == LoginTypeOTP) {
@@ -696,9 +709,7 @@ logOutSuccess() async {
     sharedPref.remove(USER_PASSWORD);
     sharedPref.remove(REMEMBER_ME);
   }
-  sharedPref.remove(LOGIN_TYPE);
-  sharedPref.remove(LATITUDE);
-  sharedPref.remove(LONGITUDE);
+
   launchScreen(getContext, SignInScreen(), isNewTask: true);
 }
 

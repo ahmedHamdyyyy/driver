@@ -1,4 +1,5 @@
 import 'package:flutter/foundation.dart';
+import 'package:flutter/material.dart';
 import 'package:zego_uikit_prebuilt_call/zego_uikit_prebuilt_call.dart';
 import 'package:zego_uikit_signaling_plugin/zego_uikit_signaling_plugin.dart';
 import 'package:permission_handler/permission_handler.dart';
@@ -411,6 +412,208 @@ class DriverZegoService {
     }
   }
 
+  /// Call a rider - Voice Call
+  static Future<bool> callRiderVoice({
+    required String riderPhoneNumber,
+    required BuildContext context,
+    String? riderName,
+  }) async {
+    try {
+      _debugPrint('📞 INITIATING VOICE CALL TO RIDER...', emoji: '📞');
+
+      // Sanitize rider phone number
+      final sanitizedRiderPhone =
+          riderPhoneNumber.replaceAll(RegExp(r'[^\w\d]'), '');
+      final displayRiderName = riderName?.isNotEmpty == true
+          ? riderName!
+          : 'Rider_$sanitizedRiderPhone';
+
+      _statusPrint('VOICE CALL TO RIDER', {
+        'Driver ID': _currentDriverId,
+        'Driver Name': _currentDriverName,
+        'Target Rider Phone': riderPhoneNumber,
+        'Sanitized Rider ID': sanitizedRiderPhone,
+        'Rider Display Name': displayRiderName,
+        'Call Type': 'VOICE'
+      });
+
+      // Check if driver is logged in
+      if (!_isLoggedIn || _currentDriverId.isEmpty) {
+        _debugPrint('❌ Driver not logged in to Zego', emoji: '❌');
+        return false;
+      }
+
+      // Check if target rider ID is valid
+      if (sanitizedRiderPhone.isEmpty) {
+        _debugPrint('❌ Invalid rider phone number', emoji: '❌');
+        return false;
+      }
+
+      _debugPrint('📞 Sending voice call invitation to rider...', emoji: '📞');
+
+      // Send voice call invitation to rider
+      await ZegoUIKitPrebuiltCallInvitationService().send(
+        isVideoCall: false,
+        invitees: [
+          ZegoCallUser(sanitizedRiderPhone, displayRiderName),
+        ],
+        resourceID: "zego_call_${DateTime.now().millisecondsSinceEpoch}",
+      );
+
+      _debugPrint('✅ VOICE CALL INVITATION SENT TO RIDER!', emoji: '✅');
+
+      _statusPrint('CALL SENT SUCCESSFULLY', {
+        'Invitation Type': 'Voice Call',
+        'From Driver': '${_currentDriverName} ($_currentDriverId)',
+        'To Rider': '$displayRiderName ($sanitizedRiderPhone)',
+        'Timestamp': DateTime.now().toString(),
+        'Status': 'Invitation Sent'
+      });
+
+      return true;
+    } catch (e) {
+      _debugPrint('❌ VOICE CALL TO RIDER FAILED: $e', emoji: '❌');
+      _statusPrint('CALL ERROR', {
+        'Error': e.toString(),
+        'Rider Phone': riderPhoneNumber,
+        'Call Type': 'Voice',
+        'Driver ID': _currentDriverId
+      });
+      return false;
+    }
+  }
+
+  /// Call a rider - Video Call
+  static Future<bool> callRiderVideo({
+    required String riderPhoneNumber,
+    required BuildContext context,
+    String? riderName,
+  }) async {
+    try {
+      _debugPrint('📹 INITIATING VIDEO CALL TO RIDER...', emoji: '📹');
+
+      // Sanitize rider phone number
+      final sanitizedRiderPhone =
+          riderPhoneNumber.replaceAll(RegExp(r'[^\w\d]'), '');
+      final displayRiderName = riderName?.isNotEmpty == true
+          ? riderName!
+          : 'Rider_$sanitizedRiderPhone';
+
+      _statusPrint('VIDEO CALL TO RIDER', {
+        'Driver ID': _currentDriverId,
+        'Driver Name': _currentDriverName,
+        'Target Rider Phone': riderPhoneNumber,
+        'Sanitized Rider ID': sanitizedRiderPhone,
+        'Rider Display Name': displayRiderName,
+        'Call Type': 'VIDEO'
+      });
+
+      // Check if driver is logged in
+      if (!_isLoggedIn || _currentDriverId.isEmpty) {
+        _debugPrint('❌ Driver not logged in to Zego', emoji: '❌');
+        return false;
+      }
+
+      // Check if target rider ID is valid
+      if (sanitizedRiderPhone.isEmpty) {
+        _debugPrint('❌ Invalid rider phone number', emoji: '❌');
+        return false;
+      }
+
+      _debugPrint('📹 Sending video call invitation to rider...', emoji: '📹');
+
+      // Send video call invitation to rider
+      await ZegoUIKitPrebuiltCallInvitationService().send(
+        isVideoCall: true,
+        invitees: [
+          ZegoCallUser(sanitizedRiderPhone, displayRiderName),
+        ],
+        resourceID: "zego_call_${DateTime.now().millisecondsSinceEpoch}",
+      );
+
+      _debugPrint('✅ VIDEO CALL INVITATION SENT TO RIDER!', emoji: '✅');
+
+      _statusPrint('CALL SENT SUCCESSFULLY', {
+        'Invitation Type': 'Video Call',
+        'From Driver': '${_currentDriverName} ($_currentDriverId)',
+        'To Rider': '$displayRiderName ($sanitizedRiderPhone)',
+        'Timestamp': DateTime.now().toString(),
+        'Status': 'Invitation Sent'
+      });
+
+      return true;
+    } catch (e) {
+      _debugPrint('❌ VIDEO CALL TO RIDER FAILED: $e', emoji: '❌');
+      _statusPrint('CALL ERROR', {
+        'Error': e.toString(),
+        'Rider Phone': riderPhoneNumber,
+        'Call Type': 'Video',
+        'Driver ID': _currentDriverId
+      });
+      return false;
+    }
+  }
+
+  /// Generic call rider function with type selection
+  static Future<bool> callRider({
+    required String riderPhoneNumber,
+    required BuildContext context,
+    String? riderName,
+    bool isVideoCall = true,
+  }) async {
+    _debugPrint('🎯 CALLING RIDER WITH TYPE SELECTION...', emoji: '🎯');
+
+    if (isVideoCall) {
+      return await callRiderVideo(
+        riderPhoneNumber: riderPhoneNumber,
+        context: context,
+        riderName: riderName,
+      );
+    } else {
+      return await callRiderVoice(
+        riderPhoneNumber: riderPhoneNumber,
+        context: context,
+        riderName: riderName,
+      );
+    }
+  }
+
+  /// Test call functionality
+  static Future<bool> testCallRider({
+    required BuildContext context,
+    String testRiderPhone = "966501234567",
+    String testRiderName = "Test Rider",
+    bool isVideoCall = true,
+  }) async {
+    _debugPrint('🧪 TESTING CALL TO RIDER...', emoji: '🧪');
+
+    _statusPrint('TEST CALL PARAMETERS', {
+      'Test Rider Phone': testRiderPhone,
+      'Test Rider Name': testRiderName,
+      'Call Type': isVideoCall ? 'Video' : 'Voice',
+      'Driver Status': _isLoggedIn ? 'Logged In' : 'Not Logged In'
+    });
+
+    return await callRider(
+      riderPhoneNumber: testRiderPhone,
+      context: context,
+      riderName: testRiderName,
+      isVideoCall: isVideoCall,
+    );
+  }
+
+  /// Get current call status
+  static Map<String, dynamic> getCallStatus() {
+    return {
+      'canMakeCalls': _isLoggedIn && _currentDriverId.isNotEmpty,
+      'driverLoggedIn': _isLoggedIn,
+      'driverID': _currentDriverId,
+      'driverName': _currentDriverName,
+      'zegoInitialized': _isInitialized,
+      'timestamp': DateTime.now().toString(),
+    };
+  }
+
   /// Print comprehensive debug info
   static void printDebugInfo() {
     _debugPrint('📋 COMPREHENSIVE DEBUG INFORMATION', emoji: '📋');
@@ -424,13 +627,26 @@ class DriverZegoService {
       'ID Valid': getDriverZegoId().isNotEmpty && getDriverZegoId().length > 3
     });
 
+    _statusPrint('CALL CAPABILITIES', {
+      'Can Make Voice Calls':
+          _isLoggedIn && _currentDriverId.isNotEmpty ? 'YES' : 'NO',
+      'Can Make Video Calls':
+          _isLoggedIn && _currentDriverId.isNotEmpty ? 'YES' : 'NO',
+      'Can Receive Calls':
+          _isLoggedIn && _currentDriverId.isNotEmpty ? 'YES' : 'NO',
+      'Ready for Both Directions':
+          _isLoggedIn && _currentDriverId.isNotEmpty ? 'YES' : 'NO'
+    });
+
     _statusPrint('INTEGRATION CHECKLIST', {
       '1. System UI Initialized': 'Check main.dart logs',
       '2. Driver Auto-Login Called':
           _isLoggedIn ? 'YES' : 'NO - CALL autoLoginDriver()',
       '3. Permissions Granted': 'Check permission status above',
       '4. Phone Number Valid': getDriverZegoId().isNotEmpty ? 'YES' : 'NO',
-      '5. Zego Credentials': 'Check Constants.dart'
+      '5. Zego Credentials': 'Check Constants.dart',
+      '6. Call Functions Available':
+          'YES - callRider(), callRiderVoice(), callRiderVideo()'
     });
   }
 }

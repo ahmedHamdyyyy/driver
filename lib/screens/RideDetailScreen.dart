@@ -14,6 +14,9 @@ import 'package:taxi_driver/utils/Colors.dart';
 import 'package:taxi_driver/utils/Extensions/app_common.dart';
 import 'package:taxi_driver/utils/Extensions/dataTypeExtensions.dart';
 import 'package:taxi_driver/utils/Images.dart';
+import 'package:taxi_driver/components/CallRiderWidget.dart';
+import 'package:taxi_driver/components/ModernCallDialog.dart';
+import 'package:taxi_driver/Services/DriverZegoService.dart';
 
 import '../core/widget/appbar/back_app_bar.dart';
 import '../main.dart';
@@ -35,6 +38,7 @@ class RideDetailScreen extends StatefulWidget {
 }
 
 class RideDetailScreenState extends State<RideDetailScreen> {
+  bool _isCallingInProgress = false; // Modern call state management
   RiderModel? riderModel;
   List<RideHistory> rideHistory = [];
   DriverRatting? riderRatting;
@@ -105,6 +109,123 @@ class RideDetailScreenState extends State<RideDetailScreen> {
   @override
   void setState(fn) {
     if (mounted) super.setState(fn);
+  }
+
+  // Enhanced call rider method with professional state management
+  Future<void> _callRider(bool isVideoCall) async {
+    // Prevent multiple simultaneous calls
+    if (_isCallingInProgress) {
+      toast("مكالمة قيد التقدم بالفعل...");
+      return;
+    }
+
+    if (riderModel?.riderContactNumber == null ||
+        riderModel!.riderContactNumber!.isEmpty) {
+      toast("رقم هاتف الراكب غير متوفر");
+      return;
+    }
+
+    setState(() {
+      _isCallingInProgress = true;
+    });
+
+    try {
+      // Ensure Zego service is active
+      if (!DriverZegoService.isLoggedIn) {
+        toast("جاري تجهيز خدمة المكالمات...");
+        bool loginResult = await DriverZegoService.autoLoginDriver();
+
+        if (!loginResult) {
+          toast("فشل في تفعيل خدمة المكالمات");
+          return;
+        }
+      }
+
+      // Show modern professional call dialog
+      showDialog(
+        context: context,
+        barrierDismissible: false,
+        builder: (context) => ModernCallDialog(
+          riderName: riderModel!.riderName ?? "راكب",
+          riderPhone: riderModel!.riderContactNumber!,
+          isVideoCall: isVideoCall,
+          onCancel: () {
+            Navigator.of(context).pop();
+            setState(() {
+              _isCallingInProgress = false;
+            });
+            toast("تم إلغاء المكالمة");
+          },
+        ),
+      );
+
+      // Add slight delay for better UX
+      await Future.delayed(Duration(milliseconds: 1500));
+
+      // Call the rider
+      bool callResult = await DriverZegoService.callRider(
+        riderPhoneNumber: riderModel!.riderContactNumber!,
+        context: context,
+        riderName: riderModel!.riderName,
+        isVideoCall: isVideoCall,
+      );
+
+      // Close modern loading dialog
+      Navigator.pop(context);
+
+      if (callResult) {
+        // Show modern success dialog
+        showDialog(
+          context: context,
+          barrierDismissible: true,
+          builder: (context) => CallSuccessDialog(
+            riderName: riderModel!.riderName ?? "راكب",
+            isVideoCall: isVideoCall,
+            onClose: () => Navigator.of(context).pop(),
+          ),
+        );
+      } else {
+        // Show modern error dialog with retry option
+        showDialog(
+          context: context,
+          barrierDismissible: true,
+          builder: (context) => CallErrorDialog(
+            errorMessage: "فشل في إرسال طلب الاتصال. يرجى المحاولة مرة أخرى.",
+            onRetry: () {
+              Navigator.of(context).pop();
+              _callRider(isVideoCall);
+            },
+            onClose: () => Navigator.of(context).pop(),
+          ),
+        );
+      }
+    } catch (e) {
+      // Close loading dialog if open
+      if (Navigator.canPop(context)) {
+        Navigator.pop(context);
+      }
+
+      // Show modern error dialog
+      showDialog(
+        context: context,
+        barrierDismissible: true,
+        builder: (context) => CallErrorDialog(
+          errorMessage: "حدث خطأ أثناء الاتصال: ${e.toString()}",
+          onRetry: () {
+            Navigator.of(context).pop();
+            _callRider(isVideoCall);
+          },
+          onClose: () => Navigator.of(context).pop(),
+        ),
+      );
+
+      print("🔴 Call error: $e");
+    } finally {
+      // Reset call state
+      setState(() {
+        _isCallingInProgress = false;
+      });
+    }
   }
 
   String _getArabicStatus(String? status) {
@@ -317,7 +438,7 @@ class RideDetailScreenState extends State<RideDetailScreen> {
               icon: Icons.straighten,
               label: 'المسافة',
               value:
-                  '${riderModel!.distance?.toStringAsFixed(2)} ${riderModel!.distanceUnit ?? 'كم'}',
+                  '${riderModel!.distance?.toStringAsFixed(digitAfterDecimal)} ${riderModel!.distanceUnit ?? 'كم'}',
               color: Colors.purple,
             ),
           ],
@@ -472,30 +593,70 @@ class RideDetailScreenState extends State<RideDetailScreen> {
                   ],
                 ),
               ),
-              if (isChatHistory == true)
-                InkWell(
-                  onTap: () {
-                    if (riderModel?.id != null) {
-                      launchScreen(
-                        context,
-                        ChatScreen(rideId: riderModel!.id!),
-                      );
-                    }
-                  },
-                  child: Container(
-                    padding: EdgeInsets.all(8.r),
-                    decoration: BoxDecoration(
-                      color: Colors.green.withOpacity(0.1),
-                      borderRadius: BorderRadius.circular(8.r),
-                      border: Border.all(color: Colors.green.withOpacity(0.3)),
-                    ),
-                    child: Icon(
-                      Icons.chat,
-                      color: Colors.green,
-                      size: 20.r,
+              Row(
+                children: [
+                  // Voice Call Button with Professional Lock
+                  InkWell(
+                    onTap:
+                        _isCallingInProgress ? null : () => _callRider(false),
+                    child: Container(
+                      padding: EdgeInsets.all(8.r),
+                      decoration: BoxDecoration(
+                        color: _isCallingInProgress
+                            ? Colors.grey.withOpacity(0.1)
+                            : Colors.green.withOpacity(0.1),
+                        borderRadius: BorderRadius.circular(8.r),
+                        border: Border.all(
+                            color: _isCallingInProgress
+                                ? Colors.grey.withOpacity(0.3)
+                                : Colors.green.withOpacity(0.3)),
+                      ),
+                      child: _isCallingInProgress
+                          ? SizedBox(
+                              width: 20.r,
+                              height: 20.r,
+                              child: CircularProgressIndicator(
+                                strokeWidth: 2,
+                                valueColor:
+                                    AlwaysStoppedAnimation<Color>(Colors.grey),
+                              ),
+                            )
+                          : Icon(
+                              Icons.phone,
+                              color: Colors.green,
+                              size: 20.r,
+                            ),
                     ),
                   ),
-                ),
+                  SizedBox(width: 8.w),
+                  // Chat Button
+                  if (isChatHistory == true)
+                    InkWell(
+                      onTap: () {
+                        if (riderModel?.id != null) {
+                          launchScreen(
+                            context,
+                            ChatScreen(rideId: riderModel!.id!),
+                          );
+                        }
+                      },
+                      child: Container(
+                        padding: EdgeInsets.all(8.r),
+                        decoration: BoxDecoration(
+                          color: Colors.orange.withOpacity(0.1),
+                          borderRadius: BorderRadius.circular(8.r),
+                          border:
+                              Border.all(color: Colors.orange.withOpacity(0.3)),
+                        ),
+                        child: Icon(
+                          Icons.chat,
+                          color: Colors.orange,
+                          size: 20.r,
+                        ),
+                      ),
+                    ),
+                ],
+              ),
             ],
           ),
         ],
@@ -1052,7 +1213,7 @@ class RideDetailScreenState extends State<RideDetailScreen> {
               : secondaryTextStyle(size: 14, color: Colors.grey[600]),
         ),
         Text(
-          '${amount.toStringAsFixed(2)} ر.س',
+          '${amount.toStringAsFixed(digitAfterDecimal)} ر.س',
           style: isTotal
               ? boldTextStyle(size: 16, color: Colors.green)
               : primaryTextStyle(size: 14, color: Colors.grey[800]),
@@ -1070,7 +1231,7 @@ class RideDetailScreenState extends State<RideDetailScreen> {
           style: secondaryTextStyle(size: 14, color: Colors.grey[600]),
         ),
         Text(
-          '- ${amount.toStringAsFixed(2)} ر.س',
+          '- ${amount.toStringAsFixed(digitAfterDecimal)} ر.س',
           style: boldTextStyle(size: 14, color: Colors.green),
         ),
       ],
@@ -1100,7 +1261,7 @@ class RideDetailScreenState extends State<RideDetailScreen> {
             style: boldTextStyle(size: 16, color: Colors.green),
           ),
           Text(
-            '${totalAmount.toStringAsFixed(2)} ر.س',
+            '${totalAmount.toStringAsFixed(digitAfterDecimal)} ر.س',
             style: boldTextStyle(size: 18, color: Colors.green),
           ),
         ],
