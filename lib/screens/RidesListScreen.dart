@@ -19,6 +19,7 @@ import 'package:url_launcher/url_launcher.dart';
 import 'dart:async';
 import 'package:taxi_driver/Services/DriverZegoService.dart';
 import 'package:taxi_driver/components/ModernCallDialog.dart';
+import 'package:taxi_driver/Services/ServiceMatchingService.dart';
 
 import '../core/widget/appbar/home_screen_app_bar.dart';
 
@@ -88,6 +89,10 @@ class RidesListScreenState extends State<RidesListScreen>
             .where((ride) =>
                 ride.status == PENDING || ride.status == NEW_RIDE_REQUESTED)
             .toList();
+
+        // تطبيق تصفية نوع الخدمة أيضاً على التحديث التلقائي
+        pendingRides =
+            ServiceMatchingService.filterRidesByService(pendingRides);
 
         int newPendingCount = pendingRides.length;
 
@@ -189,7 +194,9 @@ class RidesListScreenState extends State<RidesListScreen>
   }
 
   void init() async {
-    afterBuildCreated(() {
+    afterBuildCreated(() async {
+      // تهيئة معلومات السائق للتصفية حسب نوع الخدمة
+      await ServiceMatchingService.initializeDriverData();
       refreshData();
       _monitorCompletedRides();
     });
@@ -247,6 +254,12 @@ class RidesListScreenState extends State<RidesListScreen>
                       ride.status == NEW_RIDE_REQUESTED) &&
                   ride.driverId == null)
               .toList();
+
+          // تطبيق تصفية نوع الخدمة للطلبات الجديدة
+          print('📋 تطبيق تصفية نوع الخدمة على ${newData.length} طلب جديد...');
+          newData = ServiceMatchingService.filterRidesByService(newData);
+          print(
+              '🎯 النتيجة النهائية: ${newData.length} طلب متطابق مع نوع خدمة السائق');
         } else if (currentStatus == 'active') {
           // الطلبات النشطة للسائق الحالي فقط
           newData = newData
@@ -313,6 +326,10 @@ class RidesListScreenState extends State<RidesListScreen>
       body: Column(
         children: [
           const HomeScreenAppBar(),
+
+          // مؤشر تصفية نوع الخدمة
+          if (_tabController?.index == 0) _buildServiceFilterIndicator(),
+
           Container(
             margin: EdgeInsets.all(16.r),
             decoration: BoxDecoration(
@@ -474,6 +491,53 @@ class RidesListScreenState extends State<RidesListScreen>
             style: secondaryTextStyle(size: 14, color: Colors.grey[500]),
             textAlign: TextAlign.center,
           ),
+
+          // إضافة معلومات نوع الخدمة للطلبات الجديدة
+          if (status == PENDING) ...[
+            SizedBox(height: 20.h),
+            Container(
+              margin: EdgeInsets.symmetric(horizontal: 32.w),
+              padding: EdgeInsets.all(16.r),
+              decoration: BoxDecoration(
+                color: primaryColor.withOpacity(0.1),
+                borderRadius: BorderRadius.circular(12.r),
+                border: Border.all(color: primaryColor.withOpacity(0.3)),
+              ),
+              child: Column(
+                children: [
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Icon(
+                        Icons.filter_alt,
+                        size: 18.r,
+                        color: primaryColor,
+                      ),
+                      SizedBox(width: 8.w),
+                      Text(
+                        'تصفية نوع الخدمة',
+                        style: boldTextStyle(size: 14, color: primaryColor),
+                      ),
+                    ],
+                  ),
+                  SizedBox(height: 8.h),
+                  Text(
+                    'نوع خدمتك: ${ServiceMatchingService.getServiceName()}',
+                    style:
+                        secondaryTextStyle(size: 12, color: Colors.grey[600]),
+                    textAlign: TextAlign.center,
+                  ),
+                  SizedBox(height: 4.h),
+                  Text(
+                    'يتم عرض الطلبات المتطابقة مع نوع خدمتك فقط',
+                    style:
+                        secondaryTextStyle(size: 11, color: Colors.grey[500]),
+                    textAlign: TextAlign.center,
+                  ),
+                ],
+              ),
+            ),
+          ],
         ],
       ),
     );
@@ -487,6 +551,58 @@ class RidesListScreenState extends State<RidesListScreen>
           color: primaryColor,
           strokeWidth: 2,
         ),
+      ),
+    );
+  }
+
+  Widget _buildServiceFilterIndicator() {
+    final serviceName = ServiceMatchingService.getServiceName();
+    final driverServiceId = ServiceMatchingService.driverServiceId;
+
+    if (driverServiceId == null) return SizedBox.shrink();
+
+    return Container(
+      margin: EdgeInsets.symmetric(horizontal: 16.w, vertical: 8.h),
+      padding: EdgeInsets.symmetric(horizontal: 12.w, vertical: 8.h),
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          colors: [
+            primaryColor.withOpacity(0.1),
+            primaryColor.withOpacity(0.05),
+          ],
+          begin: Alignment.centerLeft,
+          end: Alignment.centerRight,
+        ),
+        borderRadius: BorderRadius.circular(8.r),
+        border: Border.all(color: primaryColor.withOpacity(0.2)),
+      ),
+      child: Row(
+        children: [
+          Container(
+            padding: EdgeInsets.all(6.r),
+            decoration: BoxDecoration(
+              color: primaryColor,
+              shape: BoxShape.circle,
+            ),
+            child: Icon(
+              Icons.filter_alt,
+              size: 14.r,
+              color: Colors.white,
+            ),
+          ),
+          SizedBox(width: 10.w),
+          Expanded(
+            child: Text(
+              'تصفية نشطة: $serviceName',
+              style: boldTextStyle(size: 12, color: primaryColor),
+            ),
+          ),
+          Icon(
+            Icons.info_outline,
+            size: 16.r,
+            color: primaryColor.withOpacity(0.7),
+          ),
+        ],
       ),
     );
   }

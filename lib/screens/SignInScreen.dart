@@ -17,6 +17,7 @@ import 'package:taxi_driver/model/ServiceModel.dart';
 import 'package:taxi_driver/utils/Extensions/dataTypeExtensions.dart';
 import 'package:taxi_driver/utils/Extensions/app_common.dart';
 import 'package:taxi_driver/utils/NewDriverDataCleaner.dart';
+import 'package:taxi_driver/Services/ServiceMatchingService.dart';
 import 'TermsConditionScreen.dart';
 import 'settings/settings_screen/presentation/pages/privacy_screen.dart';
 
@@ -851,6 +852,12 @@ class SignInScreenState extends State<SignInScreen>
             // Set verification status to 0 (unverified)
             await sharedPref.setInt(IS_Verified_Driver, 0);
 
+            // حفظ نوع الخدمة للتصفية
+            final serviceId = listServices.isNotEmpty
+                ? (listServices[selectedService].id ?? 1)
+                : 1;
+            await ServiceMatchingService.saveDriverServiceId(serviceId);
+
             // Mark as new driver registration
             await sharedPref.setBool('is_first_driver_login', true);
             await sharedPref.setInt('total_completed_rides', 0);
@@ -900,6 +907,9 @@ class SignInScreenState extends State<SignInScreen>
         }
 
         await logInApi(req).then((value) async {
+          // تهيئة معلومات السائق للتصفية
+          await ServiceMatchingService.initializeDriverData();
+
           if (sharedPref.getInt(IS_Verified_Driver) == 1) {
             await checkPermission().then((value) async {
               await Geolocator.getCurrentPosition().then((value) {

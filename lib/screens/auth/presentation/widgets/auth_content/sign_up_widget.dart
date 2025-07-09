@@ -9,6 +9,7 @@ import 'package:taxi_driver/network/RestApis.dart';
 import 'package:taxi_driver/utils/Common.dart';
 import 'package:taxi_driver/utils/Constants.dart';
 import 'package:taxi_driver/utils/Extensions/app_common.dart';
+import 'package:taxi_driver/Services/ServiceMatchingService.dart';
 import 'dart:io'; // Added for InternetAddress
 
 /**
@@ -671,7 +672,13 @@ class _SignUpWidgetState extends State<SignUpWidget> {
         'service_id': 1,
       };
 
-      await signUpApi(req);
+      final response = await signUpApi(req);
+
+      // حفظ نوع الخدمة للتصفية
+      if (response.data?.serviceId != null) {
+        await ServiceMatchingService.saveDriverServiceId(
+            response.data!.serviceId);
+      }
     } catch (e) {
       print('API Error: $e');
       throw e;
