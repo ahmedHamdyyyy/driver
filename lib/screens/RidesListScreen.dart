@@ -20,6 +20,7 @@ import 'dart:async';
 import 'package:taxi_driver/Services/DriverZegoService.dart';
 import 'package:taxi_driver/components/ModernCallDialog.dart';
 import 'package:taxi_driver/Services/ServiceMatchingService.dart';
+import 'package:taxi_driver/screens/NotificationScreen.dart';
 
 import '../core/widget/appbar/home_screen_app_bar.dart';
 
@@ -47,6 +48,7 @@ class RidesListScreenState extends State<RidesListScreen>
   int _lastPendingCount = 0;
   bool _isCallingInProgress = false;
   String? _currentCallingRideId;
+  DateTime? _lastUpdateTime;
 
   @override
   void initState() {
@@ -71,11 +73,59 @@ class RidesListScreenState extends State<RidesListScreen>
   }
 
   void _startAutoRefresh() {
-    _refreshTimer = Timer.periodic(Duration(seconds: 30), (timer) {
-      if (_tabController?.index == 0 && mounted) {
+    _refreshTimer?.cancel(); // Cancel any existing timer
+    _refreshTimer = Timer.periodic(Duration(seconds: 5), (timer) {
+      if (!mounted) {
+        timer.cancel();
+        return;
+      }
+
+      // تحديث تلقائي للطلبات الجديدة فقط في تاب الطلبات الجديدة
+      if (_tabController?.index == 0) {
         _checkForNewRequests();
       }
+
+      // تحديث أقل تكراراً للتطبيقات النشطة (كل 15 ثانية)
+      if (_refreshCounter % 3 == 0 && _tabController?.index == 1) {
+        _silentRefreshActiveRides();
+      }
+
+      _refreshCounter++;
     });
+  }
+
+  // عداد للتحكم في تكرار التحديث
+  int _refreshCounter = 0;
+
+  // تحديث صامت للطلبات النشطة
+  void _silentRefreshActiveRides() async {
+    try {
+      final response = await getRiderRequestList(
+        page: 1,
+        status: '',
+        driverId: sharedPref.getInt(USER_ID),
+      );
+
+      if (!mounted) return;
+
+      List<RiderModel> activeRides = response.data!
+          .where((ride) =>
+              (ride.status == ACCEPTED ||
+                  ride.status == ARRIVING ||
+                  ride.status == ARRIVED ||
+                  ride.status == IN_PROGRESS ||
+                  ride.status == ACTIVE) &&
+              ride.driverId == sharedPref.getInt(USER_ID))
+          .toList();
+
+      if (_tabController?.index == 1) {
+        setState(() {
+          tabData['active'] = activeRides;
+        });
+      }
+    } catch (e) {
+      // تجاهل الأخطاء في التحديث الصامت
+    }
   }
 
   void _checkForNewRequests() async {
@@ -209,6 +259,11 @@ class RidesListScreenState extends State<RidesListScreen>
       isLoading = true;
     });
     await fetchRideRequests();
+
+    // Update last refresh time
+    setState(() {
+      _lastUpdateTime = DateTime.now();
+    });
   }
 
   Future<void> fetchRideRequests() async {
@@ -320,12 +375,195 @@ class RidesListScreenState extends State<RidesListScreen>
     }
   }
 
+  // Custom AppBar with refresh functionality
+  Widget _buildCustomAppBar() {
+    return Container(
+      width: double.infinity,
+      height: 144.h,
+      decoration: BoxDecoration(
+        color: Color(0xFF3DB44A),
+        image: DecorationImage(
+          image: AssetImage("assets/images/Vector.png"),
+          fit: BoxFit.fill,
+        ),
+      ),
+      child: Padding(
+        padding: EdgeInsets.symmetric(horizontal: 21.w),
+        child: Row(
+          children: [
+            // User info section (same as HomeScreenAppBar)
+            Container(
+              width: 45.w,
+              height: 45.w,
+              decoration: BoxDecoration(
+                color: Colors.white,
+                shape: BoxShape.circle,
+              ),
+              child: Center(
+                child: Text(
+                  (sharedPref.getString(FIRST_NAME)?.isNotEmpty == true
+                      ? sharedPref
+                          .getString(FIRST_NAME)!
+                          .substring(0, 1)
+                          .toUpperCase()
+                      : appStore.userName.isNotEmpty
+                          ? appStore.userName.substring(0, 1).toUpperCase()
+                          : 'M'),
+                  style: boldTextStyle(color: primaryColor, size: 18),
+                ),
+              ),
+            ),
+            SizedBox(width: 9.w),
+            Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Text(
+                  'اهلا بك في مسارك',
+                  style: TextStyle(
+                    color: Colors.white,
+                    fontSize: 14,
+                    fontFamily: 'Tajawal',
+                    fontWeight: FontWeight.w500,
+                  ),
+                ),
+                Text(
+                  '${sharedPref.getString(FIRST_NAME) ?? ''} ${sharedPref.getString(LAST_NAME) ?? ''}'
+                      .trim(),
+                  style: TextStyle(
+                    color: Colors.white,
+                    fontSize: 12,
+                    fontFamily: 'Tajawal',
+                    fontWeight: FontWeight.w500,
+                  ),
+                ),
+              ],
+            ),
+            Spacer(),
+
+            // Refresh button
+            GestureDetector(
+              onTap: () => _manualRefresh(),
+              child: Container(
+                padding: EdgeInsets.all(8.r),
+                decoration: BoxDecoration(
+                  color: Colors.white.withOpacity(0.15),
+                  borderRadius: BorderRadius.circular(12.r),
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(
+                      Icons.refresh,
+                      color: Colors.white,
+                      size: 18.r,
+                    ),
+                    SizedBox(width: 4.w),
+                    Text(
+                      'تحديث',
+                      style: boldTextStyle(color: Colors.white, size: 12),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+
+            SizedBox(width: 12.w),
+
+            // Notification button
+            GestureDetector(
+              onTap: () {
+                try {
+                  launchScreen(context, NotificationScreen());
+                } catch (e) {
+                  debugPrint('Navigation error: $e');
+                }
+              },
+              child: Icon(
+                Icons.notifications_outlined,
+                color: Colors.white,
+                size: 28.r,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  // Manual refresh with user feedback
+  Future<void> _manualRefresh() async {
+    if (isLoading) return; // Prevent multiple simultaneous refreshes
+
+    // Haptic feedback
+    try {
+      // ignore: import_of_legacy_library_into_null_safe
+      // HapticFeedback.lightImpact();
+    } catch (e) {}
+
+    // Show loading state
+    setState(() {
+      isLoading = true;
+    });
+
+    try {
+      // Force refresh current tab
+      await refreshData();
+
+      // Show success feedback
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(Icons.check_circle, color: Colors.white, size: 20.r),
+              SizedBox(width: 8.w),
+              Text(
+                'تم التحديث بنجاح ✅',
+                style: boldTextStyle(color: Colors.white, size: 14),
+              ),
+            ],
+          ),
+          backgroundColor: Colors.green,
+          duration: Duration(seconds: 2),
+          behavior: SnackBarBehavior.floating,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(12.r),
+          ),
+        ),
+      );
+    } catch (e) {
+      // Show error feedback
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(Icons.error, color: Colors.white, size: 20.r),
+              SizedBox(width: 8.w),
+              Text(
+                'فشل في التحديث. حاول مرة أخرى',
+                style: boldTextStyle(color: Colors.white, size: 14),
+              ),
+            ],
+          ),
+          backgroundColor: Colors.red,
+          duration: Duration(seconds: 3),
+          behavior: SnackBarBehavior.floating,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(12.r),
+          ),
+        ),
+      );
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       body: Column(
         children: [
-          const HomeScreenAppBar(),
+          _buildCustomAppBar(),
 
           // مؤشر تصفية نوع الخدمة
           if (_tabController?.index == 0) _buildServiceFilterIndicator(),
@@ -425,11 +663,44 @@ class RidesListScreenState extends State<RidesListScreen>
     List<RiderModel> currentData = tabData[status] ?? [];
 
     return RefreshIndicator(
-      onRefresh: refreshData,
+      onRefresh: () async {
+        await refreshData();
+        // Show subtle feedback for pull refresh
+        ScaffoldMessenger.of(context).hideCurrentSnackBar();
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              'تم تحديث الطلبات 🔄',
+              style: boldTextStyle(color: Colors.white, size: 12),
+            ),
+            backgroundColor: primaryColor,
+            duration: Duration(seconds: 1),
+            behavior: SnackBarBehavior.floating,
+            margin: EdgeInsets.only(
+              bottom: MediaQuery.of(context).size.height - 200,
+              left: 20,
+              right: 20,
+            ),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(8.r),
+            ),
+          ),
+        );
+      },
       color: primaryColor,
+      strokeWidth: 2.5,
+      displacement: 40,
       child: Stack(
         children: [
-          if (currentData.isEmpty && !isLoading) _buildEmptyState(status),
+          // Always provide a scrollable widget for RefreshIndicator
+          if (currentData.isEmpty && !isLoading)
+            CustomScrollView(
+              slivers: [
+                SliverFillRemaining(
+                  child: _buildEmptyState(status),
+                ),
+              ],
+            ),
           if (currentData.isNotEmpty) _buildRidesList(currentData),
           if (isLoading) _buildLoadingIndicator(),
         ],
@@ -481,63 +752,10 @@ class RidesListScreenState extends State<RidesListScreen>
           ),
           SizedBox(height: 24.h),
           Text(
-            _getEmptyMessage(status),
+            'لا توجد طلبات',
             style: boldTextStyle(size: 18, color: Colors.grey[700]),
             textAlign: TextAlign.center,
           ),
-          SizedBox(height: 8.h),
-          Text(
-            _getEmptySubMessage(status),
-            style: secondaryTextStyle(size: 14, color: Colors.grey[500]),
-            textAlign: TextAlign.center,
-          ),
-
-          // إضافة معلومات نوع الخدمة للطلبات الجديدة
-          if (status == PENDING) ...[
-            SizedBox(height: 20.h),
-            Container(
-              margin: EdgeInsets.symmetric(horizontal: 32.w),
-              padding: EdgeInsets.all(16.r),
-              decoration: BoxDecoration(
-                color: primaryColor.withOpacity(0.1),
-                borderRadius: BorderRadius.circular(12.r),
-                border: Border.all(color: primaryColor.withOpacity(0.3)),
-              ),
-              child: Column(
-                children: [
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      Icon(
-                        Icons.filter_alt,
-                        size: 18.r,
-                        color: primaryColor,
-                      ),
-                      SizedBox(width: 8.w),
-                      Text(
-                        'تصفية نوع الخدمة',
-                        style: boldTextStyle(size: 14, color: primaryColor),
-                      ),
-                    ],
-                  ),
-                  SizedBox(height: 8.h),
-                  Text(
-                    'نوع خدمتك: ${ServiceMatchingService.getServiceName()}',
-                    style:
-                        secondaryTextStyle(size: 12, color: Colors.grey[600]),
-                    textAlign: TextAlign.center,
-                  ),
-                  SizedBox(height: 4.h),
-                  Text(
-                    'يتم عرض الطلبات المتطابقة مع نوع خدمتك فقط',
-                    style:
-                        secondaryTextStyle(size: 11, color: Colors.grey[500]),
-                    textAlign: TextAlign.center,
-                  ),
-                ],
-              ),
-            ),
-          ],
         ],
       ),
     );
@@ -565,46 +783,41 @@ class RidesListScreenState extends State<RidesListScreen>
       margin: EdgeInsets.symmetric(horizontal: 16.w, vertical: 8.h),
       padding: EdgeInsets.symmetric(horizontal: 12.w, vertical: 8.h),
       decoration: BoxDecoration(
-        gradient: LinearGradient(
-          colors: [
-            primaryColor.withOpacity(0.1),
-            primaryColor.withOpacity(0.05),
-          ],
-          begin: Alignment.centerLeft,
-          end: Alignment.centerRight,
-        ),
+        color: Colors.green.withOpacity(0.1),
         borderRadius: BorderRadius.circular(8.r),
-        border: Border.all(color: primaryColor.withOpacity(0.2)),
+        border: Border.all(color: Colors.green.withOpacity(0.2)),
       ),
       child: Row(
+        mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          Container(
-            padding: EdgeInsets.all(6.r),
-            decoration: BoxDecoration(
-              color: primaryColor,
-              shape: BoxShape.circle,
-            ),
-            child: Icon(
-              Icons.filter_alt,
-              size: 14.r,
-              color: Colors.white,
-            ),
-          ),
-          SizedBox(width: 10.w),
-          Expanded(
-            child: Text(
-              'تصفية نشطة: $serviceName',
-              style: boldTextStyle(size: 12, color: primaryColor),
-            ),
-          ),
           Icon(
-            Icons.info_outline,
+            Icons.filter_alt,
             size: 16.r,
-            color: primaryColor.withOpacity(0.7),
+            color: Colors.green,
+          ),
+          SizedBox(width: 8.w),
+          Text(
+            'نوع الخدمة: $serviceName',
+            style: boldTextStyle(size: 12, color: Colors.green),
           ),
         ],
       ),
     );
+  }
+
+  String _formatLastUpdateTime() {
+    if (_lastUpdateTime == null) return '';
+
+    final now = DateTime.now();
+    final difference = now.difference(_lastUpdateTime!);
+
+    if (difference.inSeconds < 60) {
+      return 'منذ ${difference.inSeconds} ثانية';
+    } else if (difference.inMinutes < 60) {
+      return 'منذ ${difference.inMinutes} دقيقة';
+    } else {
+      return 'منذ ${difference.inHours} ساعة';
+    }
   }
 
   Widget? _buildFloatingActionButton() {
@@ -703,11 +916,10 @@ class RidesListScreenState extends State<RidesListScreen>
     bool isInProgress = data.status == IN_PROGRESS;
     bool isActive = data.status == ACTIVE;
 
-    bool showActionButtons =
-        isPending || isNewRequest || (isAccepted && data.startTime == null);
-
     bool isActiveRide =
         isAccepted || isArriving || isArrived || isInProgress || isActive;
+
+    bool showActionButtons = (isPending || isNewRequest) && !isActiveRide;
 
     Color statusColor = isPending || isNewRequest
         ? Colors.orange
