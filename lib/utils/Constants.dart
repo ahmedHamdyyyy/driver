@@ -262,9 +262,11 @@ const PER_PAGE = 50;
 //endregion
 
 //region Zego Cloud SDK Configuration
-const ZEGO_APP_ID = 113057318;
+const ZEGO_APP_ID = 21583310; // int type for SDK usage
+const ZEGO_APP_ID_STRING = '21583310'; // string type if needed elsewhere
 const ZEGO_APP_SIGN =
-    '0a02b0de3f2a9213f4cd0731e1ce7c0d2ee6acdc1f52cd6958ac7839b9caddc6';
-const ZEGO_CALLBACK_SECRET = '0a02b0de3f2a9213f4cd0731e1ce7c0d';
+    '1850e7392028d557bdc0d11dfa47270277f2ecebf749b40fe96c4bdd063dfe39';
+const ZEGO_CALLBACK_SECRET = '1850e7392028d557bdc0d11dfa472702';
+const ZEGO_SERVER_SECRET = 'eabb0643c363ca7c30334f86badf1f9c';
 const ZEGO_SCENARIO = 'Default';
 //endregion
