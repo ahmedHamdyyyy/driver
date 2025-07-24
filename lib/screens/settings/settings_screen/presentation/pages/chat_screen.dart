@@ -150,14 +150,43 @@ class _ChatScreenState extends State<ChatScreen> {
     String f_name = sharedPref.getString(FIRST_NAME) ?? '';
     String l_name = sharedPref.getString(LAST_NAME) ?? '';
 
-    notificationService
-        .sendPushNotifications(
-            f_name == ''
-                ? sharedPref.getString(USER_NAME)!
-                : f_name + " $l_name",
-            messageCont.text,
-            receiverPlayerId: chatTarget.playerId)
-        .catchError(log);
+    // محاولة إرسال الإشعار بناءً على رقم الهاتف أولاً
+    if (chatTarget.contactNumber != null &&
+        chatTarget.contactNumber!.isNotEmpty) {
+      try {
+        await notificationService.sendPushNotificationByPhone(
+          f_name == '' ? sharedPref.getString(USER_NAME)! : f_name + " $l_name",
+          messageCont.text,
+          receiverPhoneNumber: chatTarget.contactNumber,
+        );
+        log('✅ Notification sent by phone number: ${chatTarget.contactNumber}');
+      } catch (e) {
+        log('❌ Phone-based notification failed, trying Player ID: $e');
+        // إذا فشل الإرسال بالهاتف، استخدم Player ID كـ fallback
+        if (chatTarget.playerId != null && chatTarget.playerId!.isNotEmpty) {
+          notificationService
+              .sendPushNotifications(
+                  f_name == ''
+                      ? sharedPref.getString(USER_NAME)!
+                      : f_name + " $l_name",
+                  messageCont.text,
+                  receiverPlayerId: chatTarget.playerId)
+              .catchError(log);
+        }
+      }
+    } else if (chatTarget.playerId != null && chatTarget.playerId!.isNotEmpty) {
+      // إذا لم يكن هناك رقم هاتف، استخدم Player ID
+      notificationService
+          .sendPushNotifications(
+              f_name == ''
+                  ? sharedPref.getString(USER_NAME)!
+                  : f_name + " $l_name",
+              messageCont.text,
+              receiverPlayerId: chatTarget.playerId)
+          .catchError(log);
+    } else {
+      log('❌ No phone number or Player ID available for notification');
+    }
 
     messageCont.clear();
     setState(() {});

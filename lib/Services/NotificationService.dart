@@ -122,4 +122,75 @@ class NotificationService {
       log('Exception while sending document notification: $e');
     }
   }
+
+  // إرسال إشعارات بناءً على رقم الهاتف بدلاً من Player ID
+  Future<void> sendPushNotificationByPhone(String title, String content,
+      {String? receiverPhoneNumber, String? image}) async {
+    if (receiverPhoneNumber == null || receiverPhoneNumber.isEmpty) {
+      log('Receiver phone number is empty, cannot send notification');
+      return;
+    }
+
+    // الحصول على رقم هاتف المرسل
+    String? senderPhone = sharedPref.getString(CONTACT_NUMBER);
+
+    log('📱 Sending notification by phone number:');
+    log('📱 Sender Phone: $senderPhone');
+    log('📱 Receiver Phone: $receiverPhoneNumber');
+    log('📱 Title: $title');
+    log('📱 Content: $content');
+
+    Map req = {
+      'headings': {
+        'en': title,
+        'ar': title,
+      },
+      'contents': {
+        'en': content,
+        'ar': content,
+      },
+      'data': {
+        'id': 'CHAT_${sharedPref.getInt(USER_ID)}',
+        'sender_phone': senderPhone,
+        'receiver_phone': receiverPhoneNumber,
+        'notification_type': 'chat_message',
+      },
+      'big_picture': image.validate().isNotEmpty ? image.validate() : '',
+      'large_icon': image.validate().isNotEmpty ? image.validate() : '',
+      'app_id': mOneSignalAppIdDriver, // Use driver app ID
+      'include_external_user_ids': [
+        receiverPhoneNumber
+      ], // Use phone number as External User ID
+      'android_group': mAppName,
+      'android_channel_id': mOneSignalDriverChannelID, // Use driver channel ID
+      'ios_sound': 'default_app_sound.wav',
+    };
+
+    var header = {
+      HttpHeaders.authorizationHeader:
+          'Basic $mOneSignalRestKeyDriver', // Use driver rest key
+      HttpHeaders.contentTypeHeader: 'application/json; charset=utf-8',
+    };
+
+    try {
+      Response res = await post(
+        Uri.parse('https://onesignal.com/api/v1/notifications'),
+        body: jsonEncode(req),
+        headers: header,
+      );
+
+      log('📱 Phone-based notification response: ${res.body}');
+      log('📱 Status code: ${res.statusCode}');
+
+      if (res.statusCode >= 200 && res.statusCode < 300) {
+        log('✅ Phone-based notification sent successfully');
+      } else {
+        log('❌ Error sending phone-based notification: ${res.body}');
+        throw 'Failed to send notification by phone number';
+      }
+    } catch (e) {
+      log('❌ Exception while sending phone-based notification: $e');
+      throw e;
+    }
+  }
 }

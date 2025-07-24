@@ -175,7 +175,7 @@ class _DrawerComponentState extends State<DrawerComponent> {
                       negativeText: language.no, onAccept: (v) async {
                     widget.onCall!();
                     await Future.delayed(Duration(milliseconds: 500));
-                    await logout();
+                    await logoutWithOneSignalCleanup();
                   });
                 }),
           ],

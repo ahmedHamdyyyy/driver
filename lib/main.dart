@@ -121,7 +121,14 @@ void main() async {
       sharedPref.getString(USER_PROFILE_PHOTO).validate(),
       isInitialization: true);
   initJsonFile();
+
+  // Initialize OneSignal with phone number as External User ID
   await oneSignalSettings();
+
+  // Verify and fix player_id if needed
+  if (appStore.isLoggedIn) {
+    await verifyAndFixPlayerId();
+  }
 
   // Enhanced Zego Debug Logging
   if (kDebugMode) {

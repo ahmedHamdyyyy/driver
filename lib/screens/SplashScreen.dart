@@ -122,6 +122,12 @@ class SplashScreenState extends State<SplashScreen> {
         sharedPref.setString(USER_EMAIL, value.data!.email.validate());
         sharedPref.setString(FIRST_NAME, value.data!.firstName.validate());
         sharedPref.setString(LAST_NAME, value.data!.lastName.validate());
+
+        // Initialize OneSignal if user is logged in and has phone number
+        String? phoneNumber = sharedPref.getString(CONTACT_NUMBER);
+        if (phoneNumber != null && phoneNumber.isNotEmpty) {
+          await oneSignalSettings();
+        }
       }).catchError((error) {});
     }
   }

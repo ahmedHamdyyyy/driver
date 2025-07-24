@@ -364,6 +364,9 @@ class AuthServices {
               .setUserProfile(signUpResponse.data!.profileImage.validate());
         }
 
+        // Initialize OneSignal after successful registration
+        await oneSignalSettings();
+
         onSuccess(signUpResponse);
       }
     } catch (error) {
@@ -382,6 +385,8 @@ class AuthServices {
       final loginResponse = await logInApi(requestData);
 
       if (loginResponse != null) {
+        // Initialize OneSignal after successful login
+        await oneSignalSettings();
         onSuccess(loginResponse);
       }
     } catch (error) {

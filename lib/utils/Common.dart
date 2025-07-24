@@ -21,13 +21,13 @@ import 'package:taxi_driver/utils/Extensions/Loader.dart';
 import 'package:taxi_driver/utils/Extensions/dataTypeExtensions.dart';
 import 'package:taxi_driver/utils/Images.dart';
 import 'package:http/http.dart' as http;
-
 import '../main.dart';
 import '../model/RideDetailModel.dart';
 import '../model/RiderModel.dart';
 import '../model/UserDetailModel.dart';
 import '../network/RestApis.dart';
-import '../screens/ChatScreen.dart';
+import '../model/LDBaseResponse.dart';
+import '../network/NetworkUtils.dart';
 import '../screens/MainScreen.dart';
 import '../screens/DocumentsScreen.dart';
 import '../screens/RidesListScreen.dart';
@@ -1032,12 +1032,24 @@ Color paymentStatusColor(String paymentStatus) {
 }
 
 Future<void> updatePlayerId() async {
+  // Always use phone number as player_id
+  String phoneNumber = sharedPref.getString(CONTACT_NUMBER) ?? '';
+  if (phoneNumber.isEmpty) {
+    print("❌ Phone number is empty, cannot update Player ID");
+    return;
+  }
+
   Map req = {
-    "player_id": sharedPref.getString(PLAYER_ID),
+    "player_id": phoneNumber,
   };
-  updateStatus(req).then((value) {
-    log(value.message);
-  }).catchError((error) {});
+
+  try {
+    await updateStatus(req);
+    print(
+        "✅ Player ID (phone number) updated to server successfully: $phoneNumber");
+  } catch (error) {
+    print("❌ Error updating Player ID to server: $error");
+  }
 }
 
 Future<void> exportedLog(
@@ -1055,85 +1067,337 @@ Future<void> exportedLog(
 }
 
 oneSignalSettings() async {
-/*   await Permission.notification.request();
+  await Permission.notification.request();
   OneSignal.Debug.setLogLevel(OSLogLevel.verbose);
   OneSignal.Debug.setAlertLevel(OSLogLevel.none);
-  OneSignal.consentRequired(false); */
+  OneSignal.consentRequired(false);
+
+  // Initialize with driver app ID
   OneSignal.initialize(mOneSignalAppIdDriver);
 
-  OneSignal.Location.setShared(false);
-  OneSignal.Notifications.requestPermission(true).then((accepted) async {
-    print("Accepted permission: $accepted");
-    Future.delayed(Duration(seconds: 2));
-    String? userId = await OneSignal.User.getOnesignalId();
+  // Login with phone number as External User ID
+  OneSignal.login(sharedPref.getString(CONTACT_NUMBER).validate());
 
-    while (userId == null) {
-      userId = await OneSignal.User.getOnesignalId();
-      Future.delayed(Duration(seconds: 2));
-    }
-
-    print("OneSignalID: " + (userId));
-    print("User ID Loaded.");
-  });
-
-  /*    OneSignal.Notifications.addClickListener((event) {
-      _handleNotificationOpened(event.notification);
-    }); */
-  /*  } */
-/*   OneSignal.Notifications.addForegroundWillDisplayListener((event) {
+  OneSignal.Notifications.addForegroundWillDisplayListener((event) {
     event.preventDefault();
     event.notification.display();
-  }); */
+  });
 
   saveOneSignalPlayerId();
+
+  // Set phone number as External User ID if user is logged in
   if (appStore.isLoggedIn) {
+    // Ensure player_id consistency
+    await ensurePlayerIdConsistency();
     updatePlayerId();
-  }
-  OneSignal.Notifications.addClickListener((notification) async {
-    notification.notification;
-    var notId = notification.notification.additionalData!["id"];
-    log("$notId---" +
-        notification.notification.additionalData!['type'].toString());
-    var notType = notification.notification.additionalData!['type'];
-    if (notType != null && !notId.toString().contains('CHAT')) {
-      if (notType == "document_approved") {
-        launchScreen(getContext, DocumentsScreen(isShow: true),
-            isNewTask: true, pageRouteAnimation: PageRouteAnimation.Slide);
-        return;
-      }
-      await rideDetail(rideId: int.tryParse(notId.toString())).then((value) {
-        RideDetailModel mRideModel = value;
-        if (mRideModel.data!.driverId != null) {
-          if (sharedPref.getInt(USER_ID) == mRideModel.data!.driverId) {
-            if (mRideModel.data!.paymentStatus == "paid") {
-              launchScreen(getContext, RidesListScreen(), isNewTask: true);
-            } else {
-              launchScreen(getContext, MainScreen(), isNewTask: true);
-            }
-          } else {
-            toast("Sorry! You missed this ride");
-          }
-        }
-      }).catchError((error) {
-        appStore.setLoading(false);
-        log('${error.toString()}');
-      });
+    String? phoneNumber = sharedPref.getString(CONTACT_NUMBER);
+    if (phoneNumber != null && phoneNumber.isNotEmpty) {
+      await setPhoneAsExternalUserId(phoneNumber);
     }
+  }
+
+  // Handle notification clicks
+  OneSignal.Notifications.addClickListener((notification) async {
+    var notId = notification.notification.additionalData!["id"];
+    var notType = notification.notification.additionalData!['type'];
+
     if (notId != null) {
       if (notId.toString().contains('CHAT')) {
+        // Handle chat notifications
         UserDetailModel user = await getUserDetail(
             userId: int.parse(notId.toString().replaceAll("CHAT_", "")));
+        // Navigate to chat screen - simplified for now
+        log("Chat notification received for user: ${user.data?.firstName}");
+      } else if (notType == "document_approved") {
+        launchScreen(getContext, DocumentsScreen(isShow: true),
+            isNewTask: true, pageRouteAnimation: PageRouteAnimation.Slide);
+      } else {
+        // Handle other notifications
+        await rideDetail(rideId: int.tryParse(notId.toString())).then((value) {
+          RideDetailModel mRideModel = value;
+          if (mRideModel.data!.driverId != null) {
+            if (sharedPref.getInt(USER_ID) == mRideModel.data!.driverId) {
+              if (mRideModel.data!.paymentStatus == "paid") {
+                launchScreen(getContext, RidesListScreen(), isNewTask: true);
+              } else {
+                launchScreen(getContext, MainScreen(), isNewTask: true);
+              }
+            } else {
+              toast("Sorry! You missed this ride");
+            }
+          }
+        }).catchError((error) {
+          appStore.setLoading(false);
+          log('${error.toString()}');
+        });
       }
     }
   });
 }
 
 Future<void> saveOneSignalPlayerId() async {
-  OneSignal.User.pushSubscription.addObserver((state) async {
-    if (OneSignal.User.pushSubscription.id.validate().isNotEmpty)
-      await sharedPref.setString(
-          PLAYER_ID, OneSignal.User.pushSubscription.id.validate());
-  });
+  // Save phone number instead of OneSignal Player ID
+  String? phoneNumber = sharedPref.getString(CONTACT_NUMBER);
+  if (phoneNumber != null && phoneNumber.isNotEmpty) {
+    await sharedPref.setString(PLAYER_ID, phoneNumber);
+    print("✅ Phone number saved as Player ID: $phoneNumber");
+  } else {
+    print("❌ Phone number is empty, cannot save as Player ID");
+  }
+}
+
+// Set Phone Number as External User ID
+Future<void> setPhoneAsExternalUserId(String phoneNumber) async {
+  if (phoneNumber.isNotEmpty) {
+    print("🔧 Setting phone number as External User ID: $phoneNumber");
+    try {
+      await OneSignal.login(phoneNumber);
+      print("✅ Phone number set as External User ID successfully!");
+    } catch (e) {
+      print("❌ Error setting phone as External User ID: $e");
+    }
+  } else {
+    print("❌ Phone number is empty, cannot set as External User ID");
+  }
+}
+
+// دالة اختبار لإرسال إشعار بناءً على رقم الهاتف
+Future<void> testPhoneBasedNotification(String receiverPhone) async {
+  try {
+    await notificationService.sendPushNotificationByPhone(
+      'اختبار الإشعارات',
+      'هذا إشعار اختبار لإرسال الإشعارات بناءً على رقم الهاتف',
+      receiverPhoneNumber: receiverPhone,
+    );
+    log('✅ Test notification sent successfully to: $receiverPhone');
+  } catch (e) {
+    log('❌ Test notification failed: $e');
+  }
+}
+
+// دالة لطباعة معلومات نظام الإشعارات
+void printNotificationSystemInfo() {
+  String? currentPhone = sharedPref.getString(CONTACT_NUMBER);
+  String? currentPlayerId = sharedPref.getString(PLAYER_ID);
+  bool isLoggedIn = appStore.isLoggedIn;
+
+  log('📱 === NOTIFICATION SYSTEM INFO ===');
+  log('📱 Current User Phone: $currentPhone');
+  log('📱 Current Player ID: $currentPlayerId');
+  log('📱 Is Logged In: $isLoggedIn');
+  log('📱 OneSignal App ID: $mOneSignalAppIdDriver');
+  log('📱 OneSignal Rest Key: ${mOneSignalRestKeyDriver.substring(0, 20)}...');
+  log('📱 ================================');
+}
+
+// Debug helper functions
+void printPlayerIdInfo() {
+  print("=== PLAYER ID INFO ===");
+  print("Current Player ID: ${sharedPref.getString(PLAYER_ID)}");
+  print("Contact Number: ${sharedPref.getString(CONTACT_NUMBER)}");
+  print(
+      "Is Player ID Empty: ${sharedPref.getString(PLAYER_ID)?.isEmpty ?? true}");
+  print("======================");
+}
+
+Future<void> sendPushNotification(
+    {required String title,
+    required String content,
+    required String receiverPhoneNumber,
+    String? image,
+    String? customId,
+    String? notificationType}) async {
+  print('=== NOTIFICATION DEBUG START ===');
+  print('📱 Sending push notification:');
+  print('  - Title: $title');
+  print('  - Content: $content');
+  print('  - Receiver Phone: $receiverPhoneNumber');
+  print('  - Current User Phone: ${sharedPref.getString(CONTACT_NUMBER)}');
+
+  try {
+    if (receiverPhoneNumber.isEmpty) {
+      throw 'Receiver phone number is required';
+    }
+
+    Map req = {
+      'headings': {
+        'en': title,
+      },
+      'contents': {
+        'en': content,
+      },
+      'data': {
+        'id':
+            customId ?? 'NOTIFICATION_${DateTime.now().millisecondsSinceEpoch}',
+        'type': notificationType ?? 'GENERAL',
+      },
+      'big_picture': image.validate().isNotEmpty ? image.validate() : '',
+      'large_icon': image.validate().isNotEmpty ? image.validate() : '',
+      'app_id': mOneSignalAppIdDriver,
+      'android_channel_id': mOneSignalDriverChannelID,
+      'include_external_user_ids': [
+        receiverPhoneNumber
+      ], // Use phone number instead of player_ids
+      'android_group': mAppName,
+    };
+
+    print('📦 Notification payload:');
+    print(JsonEncoder.withIndent('  ').convert(req));
+
+    final response = await http.post(
+      Uri.parse('https://onesignal.com/api/v1/notifications'),
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': 'Basic $mOneSignalRestKeyDriver',
+      },
+      body: jsonEncode(req),
+    );
+
+    if (response.statusCode == 200) {
+      print('✅ Notification sent successfully');
+    } else {
+      print('❌ Failed to send notification: ${response.statusCode}');
+      print('Response: ${response.body}');
+    }
+  } catch (e) {
+    print('❌ Error sending notification: $e');
+  }
+
+  print('=== NOTIFICATION DEBUG END ===');
+}
+
+Future<void> testNotification() async {
+  String currentPhone = sharedPref.getString(CONTACT_NUMBER) ?? '';
+  if (currentPhone.isNotEmpty) {
+    await sendPushNotification(
+        title: "Test Notification",
+        content: "This is a test notification for driver app",
+        receiverPhoneNumber: currentPhone,
+        notificationType: "TEST");
+  } else {
+    print("❌ No phone number available for test notification");
+  }
+}
+
+// Handle phone number changes
+Future<void> updatePhoneNumberAndPlayerId(String newPhoneNumber) async {
+  try {
+    // Update local storage
+    await sharedPref.setString(CONTACT_NUMBER, newPhoneNumber);
+    await sharedPref.setString(PLAYER_ID, newPhoneNumber);
+
+    // Update OneSignal External User ID
+    await OneSignal.login(newPhoneNumber);
+
+    // Update server
+    await updatePlayerId();
+
+    print("✅ Phone number and Player ID updated successfully");
+  } catch (e) {
+    print("❌ Error updating phone number: $e");
+  }
+}
+
+// Logout cleanup
+Future<void> logoutWithOneSignalCleanup() async {
+  try {
+    // Clear OneSignal External User ID
+    await OneSignal.logout();
+
+    // Call logout API to clear player_id on server
+    await logoutApi();
+
+    // Clear local storage
+    await clearUserData();
+
+    print("✅ Logout completed successfully");
+  } catch (e) {
+    print("❌ Error during logout: $e");
+  }
+}
+
+Future<LDBaseResponse> logoutApi() async {
+  return LDBaseResponse.fromJson(await handleResponse(await buildHttpResponse(
+      'logout?clear=player_id',
+      method: HttpMethod.GET)));
+}
+
+Future<void> clearUserData() async {
+  await sharedPref.remove(PLAYER_ID);
+  await sharedPref.remove(CONTACT_NUMBER);
+  await sharedPref.remove(USER_ID);
+  await sharedPref.remove(TOKEN);
+  await sharedPref.remove(USER_EMAIL);
+  await sharedPref.remove(USER_NAME);
+  await sharedPref.remove(FIRST_NAME);
+  await sharedPref.remove(LAST_NAME);
+  await sharedPref.remove(USER_TYPE);
+  await sharedPref.remove(IS_LOGGED_IN);
+  await sharedPref.remove(IS_ONLINE);
+  await sharedPref.remove(IS_Verified_Driver);
+  await sharedPref.remove(UID);
+  await sharedPref.remove(ADDRESS);
+  await sharedPref.remove(GENDER);
+  await sharedPref.remove(LATITUDE);
+  await sharedPref.remove(LONGITUDE);
+
+  appStore.setLoggedIn(false);
+  appStore.setUserEmail('');
+  appStore.setUserProfile('');
+
+  print("✅ User data cleared successfully");
+}
+
+// Verify and fix player_id issues
+Future<void> verifyAndFixPlayerId() async {
+  String? currentPhone = sharedPref.getString(CONTACT_NUMBER);
+  String? currentPlayerId = sharedPref.getString(PLAYER_ID);
+
+  print("🔍 === PLAYER ID VERIFICATION ===");
+  print("Current Phone: $currentPhone");
+  print("Current Player ID: $currentPlayerId");
+
+  if (currentPhone != null && currentPhone.isNotEmpty) {
+    if (currentPlayerId == null ||
+        currentPlayerId.isEmpty ||
+        currentPlayerId != currentPhone) {
+      print("⚠️ Player ID needs to be fixed!");
+      print("Setting Player ID to phone number: $currentPhone");
+
+      // Save phone number as Player ID
+      await sharedPref.setString(PLAYER_ID, currentPhone);
+
+      // Update OneSignal External User ID
+      await setPhoneAsExternalUserId(currentPhone);
+
+      // Update server
+      await updatePlayerId();
+
+      print("✅ Player ID fixed successfully!");
+    } else {
+      print("✅ Player ID is already correct");
+    }
+  } else {
+    print("❌ No phone number available");
+  }
+
+  print("================================");
+}
+
+// Ensure player_id is always updated when phone number changes
+Future<void> ensurePlayerIdConsistency() async {
+  String? currentPhone = sharedPref.getString(CONTACT_NUMBER);
+  String? currentPlayerId = sharedPref.getString(PLAYER_ID);
+
+  if (currentPhone != null && currentPhone.isNotEmpty) {
+    // Always ensure player_id matches phone number
+    if (currentPlayerId != currentPhone) {
+      print("🔄 Updating Player ID to match phone number: $currentPhone");
+      await sharedPref.setString(PLAYER_ID, currentPhone);
+      await setPhoneAsExternalUserId(currentPhone);
+      await updatePlayerId();
+    }
+  }
 }
 
 class MyBehavior extends ScrollBehavior {

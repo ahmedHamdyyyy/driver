@@ -117,7 +117,9 @@ class SignUpScreenState extends State<SignUpScreen> {
             'password': widget.socialLogin
                 ? widget.userName
                 : passController.text.trim(),
-            "player_id": sharedPref.getString(PLAYER_ID).validate(),
+            "player_id": widget.socialLogin
+                ? '${widget.userName}'
+                : '${phoneController.text.trim()}',
             "user_detail": {
               'car_model': "", // Empty value for car model
               'car_color': "", // Empty value for car color
@@ -183,6 +185,9 @@ class SignUpScreenState extends State<SignUpScreen> {
 
             // Verify clean start
             await NewDriverDataCleaner.verifyCleanStart();
+
+            // Initialize OneSignal after successful signup
+            await oneSignalSettings();
 
             appStore.setLoading(false);
             toast('تم التسجيل بنجاح');

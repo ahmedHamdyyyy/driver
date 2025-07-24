@@ -83,6 +83,10 @@ class OTPDialogState extends State<OTPDialog> {
                   socialLogin: true));
         } else {
           updatePlayerId();
+
+          // Initialize OneSignal after successful OTP verification
+          await oneSignalSettings();
+
           if (sharedPref.getInt(IS_Verified_Driver) == 1) {
             Navigator.pop(context);
             launchScreen(context, DashboardScreen(), isNewTask: true);

@@ -897,7 +897,7 @@ class SignInScreenState extends State<SignInScreen>
         Map req = {
           'email': emailController.text.trim(),
           'password': passController.text.trim(),
-          "player_id": sharedPref.getString(PLAYER_ID).validate(),
+          "player_id": "", // Will be updated after login with phone number
           'user_type': DRIVER,
         };
         if (mIsCheck) {
@@ -909,6 +909,9 @@ class SignInScreenState extends State<SignInScreen>
         await logInApi(req).then((value) async {
           // تهيئة معلومات السائق للتصفية
           await ServiceMatchingService.initializeDriverData();
+
+          // Initialize OneSignal after successful login
+          await oneSignalSettings();
 
           if (sharedPref.getInt(IS_Verified_Driver) == 1) {
             await checkPermission().then((value) async {

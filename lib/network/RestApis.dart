@@ -43,7 +43,17 @@ import '../model/WalletListModel.dart';
 import '../model/WithDrawListModel.dart';
 import '../screens/SignInScreen.dart';
 import '../utils/Extensions/app_common.dart';
+import '../utils/Common.dart';
 import 'NetworkUtils.dart';
+
+// Helper function to ensure player_id is always included in API requests
+Map<String, dynamic> addPlayerIdToRequest(Map<String, dynamic> request) {
+  String phoneNumber = sharedPref.getString(CONTACT_NUMBER) ?? '';
+  if (phoneNumber.isNotEmpty) {
+    request['player_id'] = phoneNumber;
+  }
+  return request;
+}
 
 Future<LoginResponse> signUpApi(Map request) async {
   Response response = await buildHttpResponse('driver-register',
@@ -152,6 +162,26 @@ Future<LoginResponse> logInApi(Map request,
       await appStore.setUserEmail(loginResponse.data!.email.validate());
       await appStore
           .setUserProfile(loginResponse.data!.profileImage.validate());
+
+      // Save phone number as Player ID and register in OneSignal
+      if (loginResponse.data!.contactNumber != null &&
+          loginResponse.data!.contactNumber!.isNotEmpty) {
+        try {
+          // Save phone number as Player ID
+          await sharedPref.setString(
+              PLAYER_ID, loginResponse.data!.contactNumber!);
+          log('✅ Phone number saved as Player ID: ${loginResponse.data!.contactNumber}');
+
+          // Register phone number in OneSignal as External User ID
+          await setPhoneAsExternalUserId(loginResponse.data!.contactNumber!);
+          log('✅ Phone number registered in OneSignal: ${loginResponse.data!.contactNumber}');
+
+          // Update player_id on server
+          await updatePlayerId();
+        } catch (e) {
+          log('❌ Error registering phone in OneSignal: $e');
+        }
+      }
     }
     return loginResponse;
   }).catchError((e) {
@@ -231,8 +261,9 @@ Future updateProfile(
     multiPartRequest.fields['user_detail[car_production_year]'] =
         carProduction.validate();
   if (serviceId != null) multiPartRequest.fields['service_id'] = '$serviceId';
-  multiPartRequest.fields['player_id'] =
-      sharedPref.getString(PLAYER_ID).toString();
+  // Use phone number as player_id
+  String phoneNumber = sharedPref.getString(CONTACT_NUMBER) ?? '';
+  multiPartRequest.fields['player_id'] = phoneNumber;
 
   if (file != null)
     multiPartRequest.files
@@ -246,8 +277,16 @@ Future updateProfile(
         await sharedPref.setString(LAST_NAME, res.data!.lastName.validate());
         await sharedPref.setString(USER_NAME, res.data!.username.validate());
         await sharedPref.setString(USER_ADDRESS, res.data!.address.validate());
-        await sharedPref.setString(
-            CONTACT_NUMBER, res.data!.contactNumber.validate());
+
+        // Check if phone number changed and update OneSignal
+        String oldPhone = sharedPref.getString(CONTACT_NUMBER) ?? '';
+        String newPhone = res.data!.contactNumber.validate();
+        if (oldPhone != newPhone && newPhone.isNotEmpty) {
+          await updatePhoneNumberAndPlayerId(newPhone);
+        } else {
+          await sharedPref.setString(CONTACT_NUMBER, newPhone);
+        }
+
         await sharedPref.setString(GENDER, res.data!.gender.validate());
         await appStore.setUserEmail(res.data!.email.validate());
         if (res.data!.loginType != LoginTypeGoogle)
@@ -342,8 +381,14 @@ Future<ContactNumberListModel> getSosList({int? regionId}) async {
 }
 
 Future<ContactNumberListModel> deleteSosList({int? id}) async {
+  // Add player_id (phone number) to delete SOS list request
+  Map request = {
+    'player_id': sharedPref.getString(CONTACT_NUMBER) ?? '',
+  };
+
   return ContactNumberListModel.fromJson(await handleResponse(
-      await buildHttpResponse('sos-delete/$id', method: HttpMethod.POST)));
+      await buildHttpResponse('sos-delete/$id',
+          method: HttpMethod.POST, request: request)));
 }
 
 Future<WithDrawListModel> getWithDrawList({int? page}) async {
@@ -353,6 +398,12 @@ Future<WithDrawListModel> getWithDrawList({int? page}) async {
 }
 
 Future<LDBaseResponse> saveWithDrawRequest(Map request) async {
+  // Add player_id (phone number) to withdraw request
+  String phoneNumber = sharedPref.getString(CONTACT_NUMBER) ?? '';
+  if (phoneNumber.isNotEmpty) {
+    request['player_id'] = phoneNumber;
+  }
+
   return LDBaseResponse.fromJson(await handleResponse(await buildHttpResponse(
       'save-withdrawrequest',
       method: HttpMethod.POST,
@@ -432,6 +483,13 @@ Future uploadDocument(
   multiPartRequest.fields['document_id'] = documentId.toString();
   multiPartRequest.fields['is_verified'] = '0';
   if (isExpire != null) multiPartRequest.fields['is_verified'] = '0';
+
+  // Add player_id (phone number) to document upload
+  String phoneNumber = sharedPref.getString(CONTACT_NUMBER) ?? '';
+  if (phoneNumber.isNotEmpty) {
+    multiPartRequest.fields['player_id'] = phoneNumber;
+  }
+
   if (file != null)
     multiPartRequest.files
         .add(await MultipartFile.fromPath('driver_document', file.path));
@@ -483,6 +541,12 @@ Future updateVehicleDetail(
   if (serviceId != null)
     multiPartRequest.fields['service_id'] = serviceId.toString();
 
+  // Add player_id (phone number) to vehicle update
+  String phoneNumber = sharedPref.getString(CONTACT_NUMBER) ?? '';
+  if (phoneNumber.isNotEmpty) {
+    multiPartRequest.fields['player_id'] = phoneNumber;
+  }
+
   await sendMultiPartRequest(multiPartRequest, onSuccess: (data) async {
     if (data != null) {
       //
@@ -519,6 +583,12 @@ Future updateBankDetail(
       routing.validate();
   multiPartRequest.fields['user_bank_account[bank_iban]'] = iban.validate();
   multiPartRequest.fields['user_bank_account[bank_swift]'] = swift.validate();
+
+  // Add player_id (phone number) to bank update
+  String phoneNumber = sharedPref.getString(CONTACT_NUMBER) ?? '';
+  if (phoneNumber.isNotEmpty) {
+    multiPartRequest.fields['player_id'] = phoneNumber;
+  }
   await sendMultiPartRequest(multiPartRequest, onSuccess: (data) async {
     if (data != null) {
       //
@@ -529,6 +599,12 @@ Future updateBankDetail(
 }
 
 Future<LDBaseResponse> responseBidListing(Map request) async {
+  // Add player_id (phone number) to response bid listing
+  String phoneNumber = sharedPref.getString(CONTACT_NUMBER) ?? '';
+  if (phoneNumber.isNotEmpty) {
+    request['player_id'] = phoneNumber;
+  }
+
   return LDBaseResponse.fromJson(await handleResponse(await buildHttpResponse(
       'riderequest-bid-respond',
       method: HttpMethod.POST,
@@ -542,6 +618,12 @@ Future<CurrentRequestModel> getCurrentRideRequest() async {
 
 Future<LDBaseResponse> rideRequestUpdate(
     {required Map request, int? rideId}) async {
+  // Add player_id (phone number) to ride request update
+  String phoneNumber = sharedPref.getString(CONTACT_NUMBER) ?? '';
+  if (phoneNumber.isNotEmpty) {
+    request['player_id'] = phoneNumber;
+  }
+
   return LDBaseResponse.fromJson(await handleResponse(await buildHttpResponse(
       'riderequest-update/$rideId',
       method: HttpMethod.POST,
@@ -549,6 +631,12 @@ Future<LDBaseResponse> rideRequestUpdate(
 }
 
 Future<LDBaseResponse> applyBid({required Map request}) async {
+  // Add player_id (phone number) to apply bid request
+  String phoneNumber = sharedPref.getString(CONTACT_NUMBER) ?? '';
+  if (phoneNumber.isNotEmpty) {
+    request['player_id'] = phoneNumber;
+  }
+
   return LDBaseResponse.fromJson(await handleResponse(await buildHttpResponse(
       'apply-bid',
       method: HttpMethod.POST,
@@ -556,6 +644,12 @@ Future<LDBaseResponse> applyBid({required Map request}) async {
 }
 
 Future<LDBaseResponse> ratingReview({required Map request}) async {
+  // Add player_id (phone number) to rating review request
+  String phoneNumber = sharedPref.getString(CONTACT_NUMBER) ?? '';
+  if (phoneNumber.isNotEmpty) {
+    request['player_id'] = phoneNumber;
+  }
+
   return LDBaseResponse.fromJson(await handleResponse(await buildHttpResponse(
       'save-ride-rating',
       method: HttpMethod.POST,
@@ -569,6 +663,12 @@ Future<AdditionalFeesList> getAdditionalFees() async {
 }
 
 Future<LDBaseResponse> adminNotify({required Map request}) async {
+  // Add player_id (phone number) to admin notify request
+  String phoneNumber = sharedPref.getString(CONTACT_NUMBER) ?? '';
+  if (phoneNumber.isNotEmpty) {
+    request['player_id'] = phoneNumber;
+  }
+
   return LDBaseResponse.fromJson(await handleResponse(await buildHttpResponse(
       'admin-sos-notify',
       method: HttpMethod.POST,
@@ -619,20 +719,39 @@ Future<dynamic> dropOupUpdate(
 
 /// Get Notification List
 Future<NotificationListModel> getNotification({required int page}) async {
+  // Add player_id (phone number) to notification request
+  Map request = {
+    'player_id': sharedPref.getString(CONTACT_NUMBER) ?? '',
+  };
+
   return NotificationListModel.fromJson(await handleResponse(
       await buildHttpResponse('notification-list?page=$page&limit=$PER_PAGE',
-          method: HttpMethod.POST)));
+          method: HttpMethod.POST, request: request)));
 }
 
 Future<LDBaseResponse> deleteUser() async {
-  return LDBaseResponse.fromJson(await handleResponse(
-      await buildHttpResponse('delete-user-account', method: HttpMethod.POST)));
+  // Add player_id (phone number) to delete user request
+  Map request = {
+    'player_id': sharedPref.getString(CONTACT_NUMBER) ?? '',
+  };
+
+  return LDBaseResponse.fromJson(await handleResponse(await buildHttpResponse(
+      'delete-user-account',
+      method: HttpMethod.POST,
+      request: request)));
 }
 
 Future<EarningListModelWeek> earningList({Map? req}) async {
+  // Add player_id (phone number) to earning list request
+  Map request = req ?? {};
+  String phoneNumber = sharedPref.getString(CONTACT_NUMBER) ?? '';
+  if (phoneNumber.isNotEmpty) {
+    request['player_id'] = phoneNumber;
+  }
+
   return EarningListModelWeek.fromJson(await handleResponse(
       await buildHttpResponse('earning-list',
-          method: HttpMethod.POST, request: req)));
+          method: HttpMethod.POST, request: request)));
 }
 
 Future updateProfileUid() async {
@@ -648,6 +767,12 @@ Future updateProfileUid() async {
   if (sharedPref.containsKey(UID) &&
       sharedPref.getString(UID).validate().isNotEmpty) {
     multiPartRequest.fields['uid'] = sharedPref.getString(UID).toString();
+  }
+
+  // Add player_id (phone number) to profile UID update
+  String phoneNumber = sharedPref.getString(CONTACT_NUMBER) ?? '';
+  if (phoneNumber.isNotEmpty) {
+    multiPartRequest.fields['player_id'] = phoneNumber;
   }
 
   log('multipart request:${multiPartRequest.fields}');
@@ -668,6 +793,12 @@ Future<WalletDetailModel> walletDetailApi() async {
 }
 
 Future<LDBaseResponse> complaintComment({required Map request}) async {
+  // Add player_id (phone number) to complaint comment
+  String phoneNumber = sharedPref.getString(CONTACT_NUMBER) ?? '';
+  if (phoneNumber.isNotEmpty) {
+    request['player_id'] = phoneNumber;
+  }
+
   return LDBaseResponse.fromJson(await handleResponse(await buildHttpResponse(
       'save-complaintcomment',
       method: HttpMethod.POST,

@@ -1504,6 +1504,9 @@ class DashboardScreenState extends State<DashboardScreen> {
               ),
             onlineOfflineSwitch(),
             complaintButton(),
+            testNotificationButton(),
+            verifyPlayerIdButton(),
+            ensurePlayerIdButton(),
             StreamBuilder<QuerySnapshot>(
                 stream:
                     rideService.fetchRide(userId: sharedPref.getInt(USER_ID)),
@@ -3957,6 +3960,158 @@ class DashboardScreenState extends State<DashboardScreen> {
           ),
         ),
       ),
+    );
+  }
+
+  // Test notification button at the bottom right of the screen
+  Widget testNotificationButton() {
+    return Positioned(
+      right: 20,
+      bottom: 100,
+      child: GestureDetector(
+        onTap: () {
+          _showTestNotificationDialog();
+        },
+        child: Container(
+          height: 50,
+          width: 50,
+          decoration: BoxDecoration(
+            color: Colors.orange,
+            shape: BoxShape.circle,
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withOpacity(0.2),
+                blurRadius: 6,
+                spreadRadius: 0,
+                offset: Offset(0, 3),
+              ),
+            ],
+          ),
+          child: Icon(
+            Icons.notifications,
+            color: Colors.white,
+            size: 24,
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget verifyPlayerIdButton() {
+    return Positioned(
+      right: 20,
+      bottom: 160,
+      child: GestureDetector(
+        onTap: () async {
+          await verifyAndFixPlayerId();
+          toast('تم التحقق من Player ID');
+        },
+        child: Container(
+          height: 50,
+          width: 50,
+          decoration: BoxDecoration(
+            color: Colors.blue,
+            shape: BoxShape.circle,
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withOpacity(0.2),
+                blurRadius: 6,
+                spreadRadius: 0,
+                offset: Offset(0, 3),
+              ),
+            ],
+          ),
+          child: Icon(
+            Icons.verified_user,
+            color: Colors.white,
+            size: 24,
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget ensurePlayerIdButton() {
+    return Positioned(
+      right: 20,
+      bottom: 220,
+      child: GestureDetector(
+        onTap: () async {
+          await ensurePlayerIdConsistency();
+          toast('تم التأكد من Player ID');
+        },
+        child: Container(
+          height: 50,
+          width: 50,
+          decoration: BoxDecoration(
+            color: Colors.green,
+            shape: BoxShape.circle,
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withOpacity(0.2),
+                blurRadius: 6,
+                spreadRadius: 0,
+                offset: Offset(0, 3),
+              ),
+            ],
+          ),
+          child: Icon(
+            Icons.check_circle,
+            color: Colors.white,
+            size: 24,
+          ),
+        ),
+      ),
+    );
+  }
+
+  // Show test notification dialog
+  void _showTestNotificationDialog() {
+    String testPhone = '';
+
+    showDialog(
+      context: context,
+      builder: (BuildContext context) {
+        return AlertDialog(
+          title: Text('اختبار الإشعارات'),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text('أدخل رقم الهاتف لاختبار الإشعارات:'),
+              SizedBox(height: 10),
+              TextField(
+                decoration: InputDecoration(
+                  hintText: '+966501234567',
+                  border: OutlineInputBorder(),
+                ),
+                onChanged: (value) {
+                  testPhone = value;
+                },
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () {
+                Navigator.of(context).pop();
+              },
+              child: Text('إلغاء'),
+            ),
+            ElevatedButton(
+              onPressed: () async {
+                Navigator.of(context).pop();
+                if (testPhone.isNotEmpty) {
+                  await testNotification();
+                  toast('تم إرسال إشعار الاختبار');
+                } else {
+                  toast('يرجى إدخال رقم الهاتف');
+                }
+              },
+              child: Text('إرسال'),
+            ),
+          ],
+        );
+      },
     );
   }
 }
